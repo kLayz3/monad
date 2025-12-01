@@ -1,7 +1,7 @@
 #pragma once
 
 #include "libs.hh"
-#include "AuxFunctions.hh"
+#include "MndAuxFunctions.hxx"
 #include "TAnalysisProcess.hxx"
 
 #include <thread>
@@ -30,7 +30,7 @@ template <
 	typename... Processors
 > struct TAnalysisPool final {
 	static_assert(N <= POOL_MAX_THREADS_, 
-		"TAnalysisProcess template instantiated with over-the-top capacity: " _TO_STRING(POOL_MAX_THREADS_) );
+		"TAnalysisProcess template instantiated with over-the-top capacity: " _TO_STRING_MND(POOL_MAX_THREADS_) );
 	static_assert(N >= 1, "TAnalysisProcess template parameter [1] size < 1? To run singlethreaded, "
 		"put first integer template parameter to 1.");
 	static_assert(!(N & (N-1)), "TAnalysisProcess template parameter [1] (n-processes) must be a power of two.");

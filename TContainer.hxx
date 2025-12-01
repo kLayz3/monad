@@ -1,6 +1,6 @@
 #pragma once
 
-#include "AuxFunctions.hh"
+#include "MndAuxFunctions.hxx"
 #include "TOnce.hxx"
 
 #include <unordered_map>

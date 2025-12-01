@@ -1,21 +1,47 @@
 #pragma once
 
 #include "libs.hh"
-#include "AuxFunctions.hh"
+#include "MndAuxFunctions.hxx"
 
 #include <cstring>
 #include <type_traits>
 
 #include "RtypesCore.h"
-#include "TOnceBase.hxx"
 #include "TDirectory.h"
 #include "TNamed.h"
 #include "TFile.h"
+#include "TH1.h"
 #include "TROOT.h"
 
-class TH1;
 class TTree;
 template<typename T> struct TContainer;
+
+struct TOnceBase {
+	TOnceBase() { TH1::AddDirectory(kFALSE); }
+	TOnceBase(const char* name)  : _name(name) {}
+	TOnceBase(std::string name) : _name(std::move(name)) {}
+
+	TOnceBase(const TOnceBase& ) = default;
+	TOnceBase& operator=(const TOnceBase& ) = default;
+	TOnceBase(TOnceBase&& ) noexcept = default;
+	TOnceBase& operator=(TOnceBase&& ) noexcept = default;
+	virtual ~TOnceBase() = default; 
+
+	virtual Int_t Write(TFile* file = nullptr, const char* target = "") = 0;
+	virtual void* Load(TFile* file, const char* target = "") = 0;
+	virtual void Collect(const TOnceBase& ) = 0;
+	virtual	std::unique_ptr<TOnceBase> Clone() const = 0;
+
+	inline virtual void SetName(std::string name, const char* title = "") { 
+		(void)title;
+		_name = std::move(name); 
+	}
+
+	inline const char* GetName() const noexcept { return this->_name.c_str(); }
+
+protected:
+	std::string _name;
+};
 
 /**
  * A wrapper type for objects (such as TVectorD, THXX, TArray, TCutG, etc)
@@ -24,9 +50,6 @@ template<typename T> struct TContainer;
  * which shall be serialized (once) into a `TFile`.
  * Unlike `TContainer`'s other parts which will be serialized row-wise (per-event) into the RNTuple.
  * Instances are differentiated by their unique string key `_name`.
- *
- * Available types to be wrapped are limited to only the ones that can be either Summed or Averaged together.
- * Or you supply a custom collector to the constructor of this wrapper type.
  */
 
 /* Different threads will have their own unique exclusive objects of this wrapper type (for writing),
@@ -56,6 +79,10 @@ template<typename T> struct TContainer;
  * It is done in-place, a0 now carries the summed/mean'ed up value, while the other (N-1)
  * instances carry possibly intermediate calculations, and should not be used. 
  * In the master Pool instantization, it's asserted that N forms a perfect log2 (N == 2^n | ∃n ∈ Naturals).
+ *
+ * To make your type `T` fit into this picture, usual procedure is to define a free function (non-templated;
+ * most specific overload) `void Add(T&, const T&)` or `void Mean(T&, const T&)`,
+ * Or you supply a custom collector to the constructor of this wrapper type.
  */
 
 template<typename T>
@@ -128,7 +155,7 @@ public:
 			if constexpr(std::is_base_of_v<TNamed, T>)
 				if(title && *title) _internal.SetTitle(title);
 		}
-        TOnceBase::SetName(name);
+		TOnceBase::SetName(name);
 	}
 
 	Int_t Write(TFile* f = nullptr, const char* name = "") override {

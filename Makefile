@@ -1,5 +1,10 @@
-# This Makefile is an example how to compile your
-# own source files.
+# ** TEST MAKEFILE **
+# It doesn't do anything!
+# 
+# #####
+# 
+# This Makefile is just an example how to compile your
+# own source files. 
 
 SRC_DIR = $(shell pwd -P)
 DICT_DIR  = $(SRC_DIR) # for example.
@@ -18,7 +23,8 @@ HEADERS := $(wildcard $(SRC_DIR)/*.h)
 OBJ := $(patsubst $(SRC_DIR)/%.cxx, $(BUILD_DIR)/%.o, $(SRC))
 
 # Target of this example Makefile is to build and compile
-# together a dictionary for all the structures needed in the project.
+# together a dictionary for all the structures needed in the project,
+# and stuff it into a lib.
 TARGET := Structures
 DICT := $(DICT_DIR)/$(TARGET)Dict.cxx
 DICT_PCM := $(DICT_DIR)/$(TARGET)Dict_rdict.pcm
@@ -34,9 +40,11 @@ RDFLAGS = -I./ -I../ -v3 \
 all: __test__
 
 __test__ :
-	@echo "Success..!"
+	@echo "Empty make, I'm just printing..."
+	@echo "Have fun using Monad."
+	@echo "-- 𝒦𝓁𝒶𝓎𝓏𝓮"
 
-# Rules' sequence like the one below:
+# Rules' sequence should be something like:
 
 #all: $(GEN_LIB) $(DICT)
 #

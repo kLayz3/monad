@@ -11,37 +11,8 @@
 #	include <boost/stacktrace.hpp>
 #endif
 
-/* ROOT-like Form() w/o dependency. */
-inline const char* _MSG(const char* fmt, ...) {
-	thread_local std::string buffer;
-	buffer.clear();
-
-	/* Determine the size needed. */
-	va_list args;
-	va_start(args, fmt);
-	int size = std::vsnprintf(nullptr, 0, fmt, args);
-	va_end(args);
-
-	if(size < 0) return "";  // formatting error?
-
-	/* Resize buffer and actually write the formatted string. */
-	buffer.resize(size + 1);
-
-	va_start(args, fmt);
-	std::vsnprintf(buffer.data(), buffer.size(), fmt, args);
-	va_end(args);
-
-	/* Remove the trailing null. */
-	buffer.pop_back();
-
-	return buffer.c_str();
-}
-
-#define LEN(x) (sizeof x / sizeof *x)
-#define timeNow() std::chrono::high_resolution_clock::now()
-
-#define _STR_IMPL(x) #x
-#define _TO_STRING(x) _STR_IMPL(x)
+#define _STR_IMPL_MND(x) #x
+#define _TO_STRING_MND(x) _STR_IMPL_MND(x)
 
 #ifdef __unix__
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -111,6 +82,34 @@ inline const char* _MSG(const char* fmt, ...) {
 #define EMPH(x) KBH_YEL #x KNRM
 #define EMPH1(x) KBH_CYN #x KNRM
 
+/* ROOT-like Form() w/o dependency. */
+namespace mnd {
+	inline const char* msg(const char* fmt, ...) {
+		thread_local std::string buffer;
+		buffer.clear();
+
+		/* Determine the size needed. */
+		va_list args;
+		va_start(args, fmt);
+		int size = std::vsnprintf(nullptr, 0, fmt, args);
+		va_end(args);
+
+		if(size < 0) return "";  // formatting error?
+
+		/* Resize buffer and actually write the formatted string. */
+		buffer.resize(size + 1);
+
+		va_start(args, fmt);
+		std::vsnprintf(buffer.data(), buffer.size(), fmt, args);
+		va_end(args);
+
+		/* Remove the trailing null. */
+		buffer.pop_back();
+
+		return buffer.c_str();
+	}
+}
+
 #define YELL(...) \
 	do { \
 		fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILENAME__, __LINE__); \
@@ -130,8 +129,8 @@ inline const char* _MSG(const char* fmt, ...) {
 
 #define WARN_ASYNC(...) \
 	do { \
-		const char* msg_ = _MSG("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILENAME__, __LINE__); \
-		const char* msg_v_ = _MSG(__VA_ARGS__); \
+		const char* msg_ = mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILENAME__, __LINE__); \
+		const char* msg_v_ = mnd::msg(__VA_ARGS__); \
 		write(STDERR_FILENO, msg_, strlen(msg_)); \
 		write(STDERR_FILENO, msg_v_, strlen(msg_v_)); \
 	} while (0);
