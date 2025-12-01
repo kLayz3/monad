@@ -1,3 +1,5 @@
+# Optionally include this file into your main Makefile
+
 OPTIMIZATION = 1
 
 CXXFLAGS += -DPOOL_MAX_THREADS_=$(shell nproc) \
