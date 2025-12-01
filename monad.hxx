@@ -14,7 +14,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this library.  If not, see <https://www.gnu.org/licenses/>, 
+ * along with this library.  If not, see <https://www.gnu.org/licenses/> 
  * or write to the Free Software Foundation, Inc., 51 Franklin Street, 
  * Fifth Floor, Boston, MA  02110-1301  USA
  */
@@ -45,7 +45,6 @@
 #include <thread>
 
 #include "TTree.h"
-#include "TChain.h"
 #include "TKey.h"
 #include "RtypesCore.h"
 #include "TDirectory.h"
@@ -297,8 +296,8 @@ void Append(std::vector<T>& dst, std::vector<T>&& src) noexcept {
 	if(&dst == &src) return;
 	dst.reserve(dst.size() + src.size());
 	dst.insert(dst.end(),
-			std::make_move_iterator(src.begin()),
-			std::make_move_iterator(src.end()));
+		std::make_move_iterator(src.begin()),
+		std::make_move_iterator(src.end()));
 	/* src vector left in undefined state. */
 }
 
@@ -354,7 +353,7 @@ void PrintElapsed(const TimePoint& end, const TimePoint& start) {
 		elapsed = (std::chrono::duration_cast<us>(end.t - start.t).count());
 		mode_i = 0;
 	}
-    printf("Elapsed time from " EMPH1(%s) " to " EMPH1(%s) ": " EMPH(%.1f) " %s\n", start.tag.c_str(), end.tag.c_str(), elapsed, mode[mode_i]);
+	printf("Elapsed time from " EMPH1(%s) " to " EMPH1(%s) ": " EMPH(%.1f) " %s\n", start.tag.c_str(), end.tag.c_str(), elapsed, mode[mode_i]);
 }
 
 template<TimingVariant E = kMILLISECOND>
@@ -451,9 +450,9 @@ using ToStdArray_t = typename ToStdArray<T>::type;
 template<typename T, typename = void>
 struct has_clean_noexcept : std::false_type {};
 template<typename T>
-struct has_clean_noexcept<T, 
-	std::void_t<decltype(std::declval<T&>().Clean())>>
-	: std::bool_constant<
+struct has_clean_noexcept <T, 
+	std::void_t<decltype(std::declval<T&>().Clean())>
+> : std::bool_constant <
 		std::is_same_v<void, decltype(std::declval<T&>().Clean())> &&
 		noexcept(std::declval<T&>().Clean())
 	> {};
@@ -778,8 +777,7 @@ protected:
  * [1] Sum type - T must implement one of the following, checked in order:
  *         void T::Add(const T& rhs)   (such as 'TH1')
  *         void Add(T& lhs, const T& rhs) (free function; custom types; e.g. std::array<T>)
- *         T& operator+=(const T& rhs) (such as 'int')
- * [2] Mean types - T must implement one of the following, checked in order:
+ * [2] Mean types - T must not be a Sum type, and must implement one of the following, checked in order:
  *         void Mean(T& lhs, const T& rhs)
  *         T& operator+=(const T& rhs) and T& operator/=(const int) (such as 'int', 'double')
  *
@@ -801,7 +799,8 @@ protected:
  *
  * To make your type `T` fit into this picture, usual procedure is to define a free function (non-templated;
  * most specific overload) `void Add(T&, const T&)` or `void Mean(T&, const T&)`,
- * Or you supply a custom collector to the constructor of this wrapper type.
+ * Or you supply a custom collector (function pointer) to the constructor of this wrapper type.
+ * Passing a function pointer instead will force that specific invocation instead of compiler-deduced one. 
  */
 
 template<typename T> struct TContainer;
@@ -1046,9 +1045,9 @@ struct TContainerBase {
 
 /**
  * Encapsulates a type needed to be used as a (de)serialization target
- * from/to RNTuple column. It still is an abstract type, since the `Setup()` method isn't defined.
- * Users are at most expected to define the Setup() method, where the `RegisterObject` methods will be
- * chained, to give back the raw resource handles to the users' derived container class.
+ * from/to RNTuple column. It still is an abstract type, since the `Setup()` method is pure virtual.
+ * Users are at most expected to extend it and define the Setup() method, where the `RegisterObject` methods 
+ * will be chained, to give back the raw resource handles to the users' derived container class.
  */
 template<typename T>
 struct TContainer : TContainerBase {
@@ -1151,7 +1150,7 @@ public:
 		if constexpr(mnd::has_clean_noexcept<T>::value)
 			_inner->Clean();
 		else
-			static_assert(mnd::has_clean_noexcept<T>::value, "Type <T> has no `void Clean() noexcept` method.\n");
+			static_assert(mnd::has_clean_noexcept<T>::value, "Type <T> has no `void Clean() noexcept` method defined.\n");
 	}
 
 	/* Rule of five. We keep it here to be explicit about copy-ctor (not really necessary...) */
@@ -1458,7 +1457,7 @@ struct alignas(mnd::CL) TAnalysisProcess final {
 
 private:
 	mnd::JobQueue q;
-	std::atomic<bool> _running {false}; // Flagging this will join the workers' threads back to the main
+	std::atomic<bool> _running {false}; /* Flagging this will join the thread back to the main. */
 	bool _do_write {true};
 	std::thread _thread;
 
@@ -1733,7 +1732,7 @@ public:
 	
 private:
 	
-	/* Each subthread writer is a slave to the initial one, who
+	/* Each of the instances' writer is a slave to the initial one, who
 	 * holds the true unique pointer handle. */
 	void SetupWriter() {
 		if(info.out.fname.empty() || info.out.out_rnname.empty())
@@ -1856,7 +1855,6 @@ private:
 
 		else { /* TTree version. */
 			(void)TClass::GetClass("TTree");
-			(void)TClass::GetClass("TChain");
 			(void)TClass::GetClass("TBranch");
 			(void)TClass::GetClass("TBasket");
 			
@@ -2308,7 +2306,7 @@ struct TAnalysisPool<1, Processors...> final {
 		}
 	}
 	
-	void Stop() { Ref().Stop(); } /* No-op; define it anyway to keep API invariant. */
+	void Stop() { Ref().Stop(); } /* Effectively no-op; define it anyway to keep API invariance. */
 
 	decltype(auto) GetPool()       { return ( this->pool ); }
 	decltype(auto) GetPool() const { return ( this->pool ); }
