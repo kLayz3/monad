@@ -1,5 +1,22 @@
-### MONAD - Modular Object/NTuple Analysis Dataflow
+# MONAD - Modular Object/NTuple Analysis Dataflow
 
+## Table of Contents
+- [Overview](#overview)
+- [Installation](#installation)
+- [Minimal Example and Description](#min-example)
+  - [Containers](#containers)
+  - [Processors](#processors)
+  - [Main program](#main-program)
+- [Detailed Description](#detailed-descr)
+  - [`Tonce`](#tonce)
+  - [`TContainer`](#tcontainer)
+    - [`TRawContainer`](#trawcontainer)
+  - [`TProcessor`](#tprocessor)
+  - [`TAnalysisProcess`](#tanalysisprocess)
+  - [`TAnalysisPool`](#tanalysispool)
+- [Example in projects](#phd)
+
+## Overview <a name="overview"></a>
 A lightweight header-only library inspired by [FairROOT](https://github.com/FairRootGroup/FairRoot) and 
 [Go4](https://github.com/gsi-ee/go4) that allows for modular and functional analysis embedded in
 CERN ROOT framework.
@@ -17,13 +34,13 @@ CERN ROOT framework.
 
 Dependencies are C++17, ROOT 6.34+ and [boost](https://www.boost.org/doc/user-guide/getting-started.html).
 
-#### Installation
+## Installation <a name="installation"></a>
 Grab a hold of the project via `git clone` with the only `monad.hxx` file to be included. 
 The `Makefile` in this project is just an example.
 
 It is also possible to only grab the header file.
 
-#### Short Description and minimal example.
+## Short Description and minimal example <a name="min-example"></a>
 The main two abstracted ingredients are called *containers* and *processors*.
 We represent and encapsulate physics data together with a name tag into various *containers*.
 A *processor* then analyses data from input containers and stores it into a single unique output container.
@@ -37,7 +54,7 @@ Each step must output an intermediate ROOT file.
 Users are expected to write their own container and processor types which inherit from corresponding 
 base MONAD types, define a few functions and then MONAD handles the rest.
 
-##### Containers
+### Containers <a name="containers"></a>
 A container type encapsulates simultaneously both columnar data (recorded *per entry*) and one or more single-objects (called SO's) 
 that are written/read only once - such as parameters or histograms.
 To interact with ROOT, each container instance is marked with a unique name tag.
@@ -146,7 +163,7 @@ ClassImp(RNFRS);
 ClassImp(SCIParam);
 ```
 
-##### Processors
+### Processors <a name="processors"></a>
 Processor is a structure (type) which holds instances of one or more different 
 input and a *single* output container which it owns. Input containers can be of different types, and 
 the processor constructor will take a copy of each input container. Due to copy semantics of
@@ -201,7 +218,7 @@ void TFRSProc::ProcessSci(int n) {
 }
 ```
 
-##### Main program
+### Main program <a name="main-program"></a>
 Each step of the analysis is given by a *standalone* program.
 
 ```cpp
@@ -263,11 +280,11 @@ pool.Start(bar, maxEvents);
 } // end of main.
 ```
 
-##### Detailed descriptions of types
+## Detailed descriptions <a name="detailed-descr"></a>
 This section is dedicated to much more detailed description of
 backbone types, in the jargon of functional programming with a bullet list of useful calls.
 
-###### `TOnce<T>`
+### `TOnce<T>` <a name="tonce"></a>
 Single-object (SO) of type `T` that will go through OWS are wrapped in a `TOnce<T>` type,
 together with an `std::string` label. We expose identical API to both `TObject`-derived
 types and `std::` -like. The constructor of these types is always the underlying `T`'s ctor, with 
@@ -287,7 +304,7 @@ propagate the corresponding call and effectively perform a binary fold of all th
 - `T& operator() ();` returns underlying `T&` handle.
 - `T* operator-> ();` same but for `T*` ; call `T`'s methods via arrow operator.
 
-###### `TContainer<T>`
+### `TContainer<T>` <a name="tcontainer"></a>
 Wrapper around `std::shared_ptr<T>` together with a vector of SO handles.
 It also holds an `std::string` label, which shall be the name of the corresponding column in the `RNTuple`.
 The string label of each of the held `TOnce<T>` objects is prefixed with the container label and an underscore.
@@ -303,7 +320,7 @@ method. In the type definition, for performance reasons, do the cache-alignment 
 - `T& inner();`     return underlying `T&` handle.
 - `T* operator->();` same but for `T*` ; call `T`'s methods via arrow operator.
 
-###### `TRawContainer<T>`
+#### `TRawContainer<T>` <a name="trawcontainer"></a>
 Initial step of the analysis usually requires reading from `TTree` rather than `RNTuple`.
 This type is used to encapsulate a deserialization target (a `TBranch`) which cling RTTI resolves to type `T`.
 Note that SO deserialization isn't supported in this case.
@@ -312,7 +329,7 @@ Note that SO deserialization isn't supported in this case.
 - `T* raw();` return underlying `T*` handle.
 - `T* operator->();` same; call `T`'s methods via arrow operator.
 
-###### `TProcessor<Out(Ins...)>`
+### `TProcessor<Out(Ins...)>` <a name="tprocessor"></a>
 Backbone type used as a parent to the user-defined processor type, where `Out` is an output container type
 and `Ins...` is a list of input container types.
 Main constructor is: `explicit TProcessor(Out& , const Ins&...)` which takes ownership of the `Out` instance.
@@ -324,7 +341,7 @@ ctor. Main purpose of this derived processor type is define and implement a `voi
 - `template<uint32_t N=0> decltype(auto) GetInput();` returns reference to N-th input container.
 - `.out` - access the output container reference.
 
-###### `TAnalysisProcess<Ts...>`
+### `TAnalysisProcess<Ts...>` <a name="tanalysisprocess"></a>
 Wraps around an `std::tuple<Ts...>` of various `Ts = TProcessor<Out(Ins...)>` instances, together with some IO info, thread object and spsc queue. 
 The monadic (chainable) `emplace_process` method constructs an extended type of `TAnalysisProcess` with the new process stitched to the back of the tuple.
 
@@ -333,7 +350,7 @@ At the end, a call to `MakePool` will exit this class and hand us back the main 
 - `template<typename... Args> auto emplace_process(Args&&... args) && -> TAnalysisProcess<Ts..., U>;`
 - `template<uint32_t N> auto MakePool(u32 NSlice) && -> TAnalysisPool<N, Ts...>;`
 
-###### `TAnalysisPool<N, Ts...>`
+### `TAnalysisPool<N, Ts...>` <a name="tanalysispool"></a>
 Final type in the composition/inheritance that holds everything together.
 It owns `N > 0` instances of the underlying `TAnalysisProcess<Ts...>` which will be given off one each to its 
 underlying threads. 
@@ -346,6 +363,5 @@ the output trees (but *can* fill the SO's).
 - `void Start()` start the analysis; split the input entry list into batches of size `NSlice` and fans them 
 out to workers via round-robin, populating their respective spsc queue with 'job requests'.
 
-
-#### Example of usage
+## Example of usage <a name="phd"></a>
 Broad usage of MONAD is in [author's PhD analysis code](https://git.gsi.de/m.bajzek/sec-s118/-/tree/dev2/).
