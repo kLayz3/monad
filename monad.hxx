@@ -176,30 +176,30 @@
 
 /* ROOT-like Form() w/o dependency. */
 namespace mnd {
-	inline const char* msg(const char* fmt, ...) {
-		thread_local std::string buffer;
-		buffer.clear();
+inline const char* msg(const char* fmt, ...) {
+	thread_local std::string buffer;
+	buffer.clear();
 
-		/* Determine the size needed. */
-		va_list args;
-		va_start(args, fmt);
-		int size = std::vsnprintf(nullptr, 0, fmt, args);
-		va_end(args);
+	/* Determine the size needed. */
+	va_list args;
+	va_start(args, fmt);
+	int size = std::vsnprintf(nullptr, 0, fmt, args);
+	va_end(args);
 
-		if(size < 0) return "";  // formatting error?
+	if(size < 0) return "";  // formatting error?
 
-		/* Resize buffer and actually write the formatted string. */
-		buffer.resize(size + 1);
+	/* Resize buffer and actually write the formatted string. */
+	buffer.resize(size + 1);
 
-		va_start(args, fmt);
-		std::vsnprintf(buffer.data(), buffer.size(), fmt, args);
-		va_end(args);
+	va_start(args, fmt);
+	std::vsnprintf(buffer.data(), buffer.size(), fmt, args);
+	va_end(args);
 
-		/* Remove the trailing null. */
-		buffer.pop_back();
+	/* Remove the trailing null. */
+	buffer.pop_back();
 
-		return buffer.c_str();
-	}
+	return buffer.c_str();
+}
 }
 
 #define YELL(...) \

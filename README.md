@@ -120,7 +120,7 @@ the multithreaded collector (more about it later) needs to know how to *sum up* 
 of a SO-type. For `TH1*` types, it is already defined by the `TH1::Add(const TH1&)` method.
 
 ```cpp
-using T = std::remove_reference_t<decltype(std::declval<TFRSCalCont>().sci_param)>; // std::array<SCIParam, ??>
+using T = std::array<SCIParam, RNFRS::N_VALID_SCI>;
 void Add(T&, const T&) {} // no-op
 
 void TFRSCont::Setup() {
@@ -158,7 +158,7 @@ For the same hypothetical example above, we would do the following:
 **[1]** Define your own processor type by wrapping together the
 MONAD base procesor, and one output and one or more input types. Declare
 the two constructors and a `void ProcessEntry() noexcept` method.
-This method will be the entry point to the data mapping, and is called *per event*. 
+This method will be the entry point to the data mapping, and will be invoked *per event*. 
 
 In file `sciproc.h`:
 ```cpp
@@ -169,6 +169,7 @@ struct TFRSProc : TProcessor <
 	TFRSCont   // <-- output container type
 	(TMapCont) // <-- list of user input container types; one sample type given in this example
 > {
+    /* Type alias - not necessary but it simplifies syntax. */
     using Base = TProcessor<TFRSCont(TMapCont)>;
 
     TFRSProc(TFRSCont& out, const TMapCont& in) :
@@ -183,9 +184,9 @@ struct TFRSProc : TProcessor <
 ```
 
 **[2]** Implement the methods/constructors in the implementation file.
-In file `sciproc.cxx`:
-Note that even though containers' `void Clean()` method must be defined, it isn't
+Note that even though containers' `void Clean()` class method must be defined, it isn't
 called by default. You can call it manually here.
+In file `sciproc.cxx`:
 
 ```cpp
 void TFRSProc::ProcessEntry() noexcept {
@@ -196,7 +197,7 @@ void TFRSProc::ProcessEntry() noexcept {
 void TFRSProc::ProcessSci(int n) {
     RNSCI& sci_obj = this->out.sci[n];
     sci_obj.Clean();
-    /*...*/ 
+    /* ... */ 
 }
 ```
 
@@ -209,7 +210,8 @@ Each step of the analysis is given by a *standalone* program.
 int main(int argc, char** argv) {
 ```
 **[1]** Declare your containers, and pass whatever initialization you wish.
-Call their `Setup()` method.
+Call their `Setup()` method. `PROG_PATH` is just an example of a preproc directive exported
+from `common.mk`.
 
 ```
 TMapCont mfrs;
@@ -229,7 +231,7 @@ auto pool = TAnalysisProcess<>(inFile, outFile, "rn_example") // <-- 'bare skele
     .MakePool<8>( 4096 ) // <-- finalize the process, split into 8 subthreads, each will be handled data in chunks of 4096 entries.
 ```
 
-**[3]** Optionally define a progress bar to see the execution progression. Check `ProgressBar` API in [indicators](https://github.com/p-ranav/indicators/)
+**[3]** Optionally define a progress bar to see the execution progression. Check `ProgressBar` API in [indicators](https://github.com/p-ranav/indicators/).
 Note, if the `indicators/indicators.hh` file is not present, then skip this step.
 
 ```
@@ -250,7 +252,7 @@ ProgressBar bar {
 ```
 
 **[4]** Start the analysis step, `maxEvents` can be specified to limit the total entry number. If left defaulted, it will handle
-all entries in the input root file. Note, if the `indicators/indicators.hh` file is not present, then `maxEvents` becomes
+all entries in the input root file. Otherwise, if the `indicators/indicators.hh` file is not present, then `maxEvents` becomes
 the first and only (optional) argument. 
 ```
 pool.Start(bar, maxEvents);	
