@@ -345,3 +345,7 @@ Condition that `N` is a power of 2 is checked.
 the output trees (but *can* fill the SO's).
 - `void Start()` start the analysis; split the input entry list into batches of size `NSlice` and fans them 
 out to workers via round-robin, populating their respective spsc queue with 'job requests'.
+
+
+#### Example of usage
+Broad usage of MONAD is in [author's PhD analysis code](https://git.gsi.de/m.bajzek/sec-s118/-/tree/dev2/).
