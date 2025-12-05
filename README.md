@@ -8,7 +8,7 @@
   - [Processors](#processors)
   - [Main program](#main-program)
 - [Detailed Description](#detailed-descr)
-  - [`Tonce`](#tonce)
+  - [`TOnce`](#tonce)
   - [`TContainer`](#tcontainer)
     - [`TRawContainer`](#trawcontainer)
   - [`TProcessor`](#tprocessor)

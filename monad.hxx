@@ -260,6 +260,11 @@ RUSTIFY_TYPE(16)
 RUSTIFY_TYPE(32)
 RUSTIFY_TYPE(64)
 
+template<typename T, std::size_t N>
+void Add(std::array<T, N>& lhs, std::array<T, N> const& rhs);
+template<typename T>
+void Add(std::vector<T>& lhs, std::vector<T> const& rhs);
+
 namespace mnd {
 
 #if defined(__HAS_INDICATORS)
@@ -324,11 +329,11 @@ enum TimingVariant : u64 {
 	kMILLISECOND = 60'000,
 	kMICROSECOND = 60'000'000,
 };
-using UT = std::underlying_type_t<TimingVariant>;
 
 template<TimingVariant E = kMILLISECOND>
 void PrintElapsed(const TimePoint& end, const TimePoint& start) {
 	using us = std::chrono::microseconds;
+	using UT = std::underlying_type_t<TimingVariant>;
 
 	static const char* mode[] = {"us", "ms", "sec", "min"};
 	int mode_i = 0;
@@ -512,6 +517,13 @@ struct has_free_add_fn : std::false_type {};
 template<typename T>
 struct has_free_add_fn<T, std::void_t<
 	decltype( Add( std::declval<T&>(), std::declval<const T&>() ) )
+>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_add_unary_op : std::false_type {};
+template<typename T>
+struct has_add_unary_op<T, std::void_t<
+	decltype( std::declval<T&>().operator+=(std::declval<const T&>() ) )
 >> : std::true_type {};
 
 template<typename T, typename = void>
@@ -997,12 +1009,12 @@ public:
 			_internal += cvt->operator()();
 			_internal /= 2;
 		}
-		else {
+		else { // Cannot issue a compile time error, since runtime collector can be provided. 
 			ERROR("(%s) - Name: '\%s\' ; Underlying type \'%s\' doesn't define how to add or mean-up two instances, "
 					"and also its been constructed without a runtime callback. "
 					"Define a `void Add(T&, const T& )` function or pass a lambda as second argument "
 					"of \'RegisterObject(..)\' (or other ctor).", 
-					_SELF_TYPE_CSTR, mnd::type_name<T>().c_str(), this->GetName());
+					_SELF_TYPE_CSTR, this->GetName(), mnd::type_name<T>().c_str());
 		}
 	}
 
@@ -1019,6 +1031,23 @@ namespace mnd {
 	constexpr auto noop_fn() -> void(*)(T&, const T&) {
 		return +[](T&, const T&) {};
 	}
+}
+
+/* A free function, if type `T` is tucked away behind std::array|vector.
+ * This also recurses nicely into std::array< std::array<... >>.
+ * Further specializations will over-specialize and this overload is fine. */
+template<typename T, std::size_t N>
+void Add(std::array<T, N>& lhs, std::array<T, N> const& rhs) {
+	for(std::size_t i = 0; i < N; ++i) {
+		Add(lhs[i], rhs[i]); 
+	}
+}
+template<typename T>
+void Add(std::vector<T>& lhs, std::vector<T> const& rhs) {
+	if(lhs.size() != rhs.size())
+		ERROR("Vectors non-equal sized. Sizes: lhs=%zu, rhs=%zu. Cannot safely collect them together.",
+			lhs.size(), rhs.size());
+	for(std::size_t i = 0; i < lhs.size(); ++i) { Add(lhs[i], rhs[i]); }
 }
 
 using TDictInfo = std::unordered_map<std::string, std::string>;
@@ -1582,8 +1611,8 @@ public:
 		/*^^^ type: std::unique_ptr<..> *  */
 		if(!p) ERROR("Calling clone but original processor object is either unitialized or set to wrong state. "
 				"State = %zu, 0 = Empty; 1 = Owning pointer; 2 = Raw pointer. Should be: " EMPH(1\n), writer.pwriter.index());
-		if(this->reader.index() == 2)
-			ERROR("Cannot use multithreaded op with TTree readers. Not implemented yet! Compile singlethreaded please!");
+		//if(this->reader.index() == 2)
+		//	ERROR("Cannot use multithreaded op with TTree readers. Not implemented yet! Compile singlethreaded please!");
 
 		dest._proc = this->_proc;
 		dest.info  = this->info;
@@ -2089,6 +2118,7 @@ template <
 			(u64)NBatch + startingIndex
 		);
 
+		ROOT::EnableThreadSafety();
 		for(auto& w : pool) {
 			w._do_write = false;
 			w.Start();
