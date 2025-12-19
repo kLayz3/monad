@@ -60,7 +60,7 @@ that are written/read only once - such as parameters or histograms.
 To interact with ROOT, each container instance is marked with a unique name tag.
 
 **[1]** Define how you represent the columnar data for this specific analysis sequence/detector. Analogy to branches in a `TTree`.
-Each such type must implement `void Clean() noexcept` method and a compiled dictionary.
+Each such type must implement `void Clean() noexcept` method and a [compiled dictionary](https://root.cern/manual/io_custom_classes/).
 
 A hypothetical example - suppose we wish to analyse data from some scintillators:
 In the file `sci.h` :
@@ -117,40 +117,41 @@ struct TFRSCont : TContainer<RNFRS> {
 
     /* Declare series of SO's here, via pointer handles. 
      * Can be left blank if only columnar data needs to be represented. */
-    std::array<SCIParam, RNFRS::N_VALID_SCI> *sci_param{};
+    std::array<SCIParam, RNFRS::N_VALID_SCI>* sci_param{};
     std::string* parameterFile;
 
     TH1I* h1_x_sci_before_target;
     TH1I* h1_x_sci_after_target;
 }
 ```
-**[3]** In the file: `sci.cxx`, define the constructors or some other method which names the container,
-plus optionally the inherited initialization method, for example.
+**[3]** In the file: `sci.cxx`, define the constructors or some other method which names the parent `TContainer`,
+plus optionally the inherited initialization method, for example. The following example will create a column in the output
+RNTuple labelled `FRS` of type `RNFRS`.
 
 ```cpp
 TFRSCont::TFRSCont() : TContainer("FRS") {}
 void TFRSCont::Init(TDictInfo info) { /* ... */ }
 ```
 
-**[4]** Implement the `void Setup()` method, where you define the SO's. Note that 
+**[4]** Implement the `void Setup()` method, where you define the SO's by name and their underlying type's constructor. Note that 
 the multithreaded collector (more about it later) needs to know how to *sum up* or *average out* two instances
-of a SO-type. For `TH1*` types, it is already defined by the `TH1::Add(const TH1&)` method.
+of a SO-type. For `TH1*` types, it is provided by default.
 
 ```cpp
 using T = std::array<SCIParam, RNFRS::N_VALID_SCI>;
 void Add(T&, const T&) {} // no-op
 
 void TFRSCont::Setup() {
-    /* Arguments in RegisterObject<T> are the same for T's constructor, if the intial arg is const char*, else
-     * it has a const char* label as the first argument. */
-	h1_x_sci_before_target = RegisterObject<TH1I>("h1_x_sci_before_target", "Position (from Scintillator) before target (mm)", 400,-100,100);
-	h1_x_sci_after_target = RegisterObject<TH1I>("h1_x_sci_after_target", "Position (from Scintillator) after target (mm)", 400,-100,100);
+    /* Arguments in RegisterObject<T> are the same as for T's constructor, if the intial arg is const char*, else
+     * it has a const char* label as the initial argument. */
+    h1_x_sci_before_target = RegisterObject<TH1I>("h1_x_sci_before_target", "Position (from Scintillator) before target (mm)", 400,-100,100);
+    h1_x_sci_after_target = RegisterObject<TH1I>("h1_x_sci_after_target", "Position (from Scintillator) after target (mm)", 400,-100,100);
 
-	/* Collector deduced from the free Add function above. */
-	sci_param = RegisterObject<T>("sci_parameters", {});
+    /* Collector deduced from the free Add function above. */
+    sci_param = RegisterObject<T>("sci_parameters", {});
 
     /* Collector function pointer can given as second argument as well. */
-	parameterFile = RegisterObject<std::string>("param_file", mnd::noop_fn<std::string>(), "This is the actual payload of the string!");
+    parameterFile = RegisterObject<std::string>("param_file", mnd::noop_fn<std::string>(), "This is the actual payload of the string!");
 }
 ```
 
@@ -164,8 +165,8 @@ ClassImp(SCIParam);
 ```
 
 ### Processors <a name="processors"></a>
-Processor is a structure (type) which holds instances of one or more different 
-input and a *single* output container which it owns. Input containers can be of different types, and 
+Processor is a type (a class) which holds instances of one or more different 
+input, and a *single* unique output container which it owns. Input containers can be of different types, and 
 the processor constructor will take a copy of each input container. Due to copy semantics of
 `std::shared_ptr<T>` and `T*`, the input data is deserialized only once, and their underlying buffers
 are allocated and filled only once per event.
@@ -181,16 +182,16 @@ In file `sciproc.h`:
 ```cpp
 #include "sci.h"
 
-/* For some type `TMapCont` which is the input in this case.. */
+/* An example: `TMapCont` is some input in this case.. */
 struct TFRSProc : TProcessor < 
 	TFRSCont   // <-- output container type
-	(TMapCont) // <-- list of user input container types; one sample type given in this example
+	(TMapCont) // <-- list of input container types
 > {
-    /* Type alias - not necessary but it simplifies syntax. */
+    /* Type alias - isn't necessary but it simplifies syntax. */
     using Base = TProcessor<TFRSCont(TMapCont)>;
 
     TFRSProc(TFRSCont& out, const TMapCont& in) :
-    TFRSProc::Base(out, in) { /* whatever extra code. */ }
+        TFRSProc::Base(out, in) { /* whatever extra code. */ }
 
     TFRSCalProc() = default;
     void ProcessEntry() noexcept;
@@ -214,7 +215,7 @@ void TFRSProc::ProcessEntry() noexcept {
 void TFRSProc::ProcessSci(int n) {
     RNSCI& sci_obj = this->out.sci[n];
     sci_obj.Clean();
-    /* ... */ 
+    /* Do the actual analysis ... */ 
 }
 ```
 
@@ -288,16 +289,14 @@ backbone types, in the jargon of functional programming with a bullet list of us
 Single-object (SO) of type `T` that will go through OWS are wrapped in a `TOnce<T>` type,
 together with an `std::string` label. We expose identical API to both `TObject`-derived
 types and `std::` -like. The constructor of these types is always the underlying `T`'s ctor, with 
-an extra `const char*` initial argument, if type `T` doesn't already handle `(const char*, T&&...)` ctor.
-`TOnce<T>` expands the abstract `TOnceBase` to enable polymorphic read and write calls.
-If in a multithreaded program, the code needs to know how to *stitch* all of the same SO's (from different threads) back together. 
-This problem can be reduced to knowing how to *add* only two instances at a time.
+an extra `const char*` initial argument, if type `T` doesn't already handle `(const char*, T&&...)` ctor. 
+If in a multithreaded program, the code needs to know how to *stitch* all of the same SO's (from different threads) into one. 
+This problem can be reduced to knowing how to stitch together only two instances at a time.
 For types such as `TH1`-derived, the `TH1::Add(const TH1&)` method already handles this. 
-Generally, compiler will try to find in-order: `T::Add(const T&)`, free `void Add(T&, const T&)` function defined and use that, if users define it.
+Generally, compiler will try to find in-order: `T::Add(const T&)`, free `void Add(T&, const T&)` and use that, if users define it.
 Same function signatures but with `Mean` symbol come next in priority.
 For types where the compiler cannot deduce the collector function, a function pointer `void (*)(T&, const T&)`
-can also be given to handle this. If the function pointer is given, it will take priority over compile-time candidates.
-Example of types where users either need to define the free fnc or give a fnc ptr is `std::array<T,N>`. 
+can also be given to handle this. If the function pointer is given, it will take priority over compile-time candidates. 
 The final `TAnalysisPool<...>::Collect()` will
 propagate the corresponding call and effectively perform a binary fold of all the instances of `TOnce<T>` with the same name (that were given to different threads).
 
@@ -312,10 +311,10 @@ It exposes a mixin-style API `U* RegisterObject(const char* name, Ts&& args...)`
 which users call in the derived type to instantiate their corresponding SO's pointer handles of types `U*`.
 
 `TContainer<T>` is still an abstract type which will be the parent to user defined containers. Children must override the `void Setup()`
-method. In the type definition, for performance reasons, do the cache-alignment by adding `alignas(mnd::CL)` after the struct/class keyword.
+method. In the class definition, for performance reasons, do the cache alignment by adding `alignas(mnd::CL)` after the struct/class keyword.
 
 - `template<typename U, typename... Ts> U* RegisterObject(const char* name, Ts&&... args);`
-- `void Clean();` calls underlying `T`'s `Clean()` method.
+- `void Clean();` calls underlying `T`'s `void T::Clean()` method.
 - `T& operator*();` return underlying `T&` handle.
 - `T& inner();`     return underlying `T&` handle.
 - `T* operator->();` same but for `T*` ; call `T`'s methods via arrow operator.
@@ -335,8 +334,7 @@ and `Ins...` is a list of input container types.
 Main constructor is: `explicit TProcessor(Out& , const Ins&...)` which takes ownership of the `Out` instance.
 It is purposefully not marked as rvalue ref (for cleaner API), but once the TProcessor has been handed the `Out&`, it owns it.
 
-Derived types will need to define a default ctor, as well as some `(Out&, const Ins...&, /* ... */)` ctor which delegates to this base class
-ctor. Main purpose of this derived processor type is define and implement a `void ProcessEntry() noexcept` method which performs the actual analysis.
+Derived types will need to define a default ctor, as well as some `(Out&, const Ins&... /*, others */)` ctor which delegates to this base class ctor. Main purpose of this derived processor type is to define and implement a `void ProcessEntry() noexcept` method which performs the actual analysis.
 
 - `template<uint32_t N=0> decltype(auto) GetInput();` returns reference to N-th input container.
 - `.out` - access the output container reference.

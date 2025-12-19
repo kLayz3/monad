@@ -65,7 +65,7 @@
 #if !defined(ROOT_VERSION)
 #	error "ROOT_VERSION macro not found in the default build? Either old ROOT is used or `ROOT/RVersion.hxx` file missing!"
 #elif ROOT_VERSION_CODE < ROOT_VERSION(6,34,0)
-#	error "The MONAD framework cannot work with ROOT versions earlier than 63404. "
+#	error "The MONAD framework cannot work with ROOT versions earlier than 63404 (6.34). "
 #endif
 
 #include "ROOT/RNTuple.hxx"
@@ -85,7 +85,7 @@
 #   define _HAS_BOOST_INCLUDE
 #	include "boost/stacktrace.hpp"
 #	include "boost/lockfree/spsc_queue.hpp"
-#	include <boost/lockfree/policies.hpp>
+#	include "boost/lockfree/policies.hpp"
 #else
 #	error "Boost packages not found in the environment?"
 #endif
@@ -269,7 +269,7 @@ namespace mnd {
 
 #if defined(__HAS_INDICATORS)
 inline void 
-PrintProgress(indicators::ProgressBar& bar,	const u64 n_entry, const u64 max_entries, const u64 step = 250) noexcept {
+PrintProgress(indicators::ProgressBar& bar, const u64 n_entry, const u64 max_entries, const u64 step = 250) noexcept {
 	static u64 n_entry_called = 0;
 	if(n_entry - n_entry_called < step) return;
 	bar.set_progress( (n_entry*100) / max_entries );
@@ -362,13 +362,13 @@ void PrintElapsed(const TimePoint& end, const TimePoint& start) {
 }
 
 template<TimingVariant E = kMILLISECOND>
-inline void PrintElapsed(const std::vector<TimePoint>& v) {
+void PrintElapsed(const std::vector<TimePoint>& v) {
 	if(v.size() < 2) return;
 	PrintElapsed<E>(v[v.size()-1], v[v.size() - 2]);
 }
 
 template<TimingVariant E = kMILLISECOND>
-inline void PrintElapsed(std::vector<TimePoint>&& v) {
+void PrintElapsed(std::vector<TimePoint>&& v) {
 	if(v.size() < 2) return;
 	printf("Total execution time: ");
 	PrintElapsed<E>(v.back(), v.front());
@@ -443,7 +443,7 @@ struct is_an_array<T[N]> : std::true_type { using value_type = T; static constex
 template<typename T, size_t N>
 struct is_an_array<std::array<T,N>> : std::true_type { using value_type = T; static constexpr size_t size = N; };
 template<typename T>
-inline constexpr bool is_an_array_v = is_an_array<T>::value;
+constexpr bool is_an_array_v = is_an_array<T>::value;
 
 template<typename T>
 struct ToStdArray { using type = T; };
@@ -543,6 +543,16 @@ struct has_add_div_unary_op<T, std::void_t <
 	>
 >> : std::true_type {};
 
+template<typename T, typename = void>
+struct has_process_entry : std::false_type {};
+template<typename T>
+struct has_process_entry<T, std::void_t<
+	decltype(std::declval<T&>().ProcessEntry())
+>> : std::is_same <
+		decltype(std::declval<T&>().ProcessEntry()),
+		void
+	> {};
+
 template< template<typename...> typename Base, typename Derived>
 struct _is_base_of_template_impl {
 	template<typename... Ts>
@@ -631,14 +641,14 @@ template<typename T,
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
 	std::size_t N = is_an_array<U>::size,
-	char(*)[N % 2] = nullptr // Odd
-> auto median(const T& sorted_arr) noexcept { return sorted_arr[(N-1)/2]; }
+	char(*)[N % 2] = nullptr
+> auto median(const T& sorted_arr) noexcept { return sorted_arr[N/2]; }
 
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
 	std::size_t N = is_an_array<U>::size,
-	char(*)[!(N % 2)] = nullptr // Even
-> auto median(const T& sorted_arr) noexcept { return ( sorted_arr[(N-1)/2] + sorted_arr[N/2] ) / 2; }
+	char(*)[!(N % 2)] = nullptr
+> auto median(const T& sorted_arr) noexcept { return ( sorted_arr[N/2] + sorted_arr[N/2 - 1] ) / 2; }
 
 template<typename T, typename... Ts>
 constexpr auto min(T t, Ts... ts) {
@@ -682,7 +692,7 @@ template<typename T,
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>
 > constexpr int len(const T& arr) {
-	static_assert(is_an_array_v<U>, "Passed type must either be an array reference &(T[N]) or &std::array<T,N>.");
+	static_assert(is_an_array_v<U>, "Passed type must either be an array reference `T (&)[N]` or `std::array<T,N>&` .");
 	return static_cast<int>(is_an_array<U>::size);	
 }
 
@@ -705,13 +715,13 @@ template<typename T,
 		std::free
 	);
 	std::string r = (own) ? own.get() : typeid(U).name();
-	if constexpr(std::is_const<T>::value)
+	if constexpr(std::is_const_v<T>)
         r += " const";
-    if constexpr(std::is_volatile<T>::value)
+    if constexpr(std::is_volatile_v<T>)
         r += " volatile";
-    if constexpr(std::is_lvalue_reference<T>::value)
+    if constexpr(std::is_lvalue_reference_v<T>)
         r += "&";
-    else if constexpr(std::is_rvalue_reference<T>::value)
+    else if constexpr(std::is_rvalue_reference_v<T>)
         r += "&&";
     return r;
 }
@@ -832,7 +842,7 @@ private:
 	T _internal;
 
 public:
-    using type = T;
+	using type = T;
 
 	/* Case 1: T constructible with (const char*, Args&&...) */
 	template<typename... Ts,
@@ -1035,7 +1045,7 @@ namespace mnd {
 
 /* A free function, if type `T` is tucked away behind std::array|vector.
  * This also recurses nicely into std::array< std::array<... >>.
- * Further specializations will over-specialize and this overload is fine. */
+ * Further specializations will over-specialize and this generic overload won't get selected. */
 template<typename T, std::size_t N>
 void Add(std::array<T, N>& lhs, std::array<T, N> const& rhs) {
 	for(std::size_t i = 0; i < N; ++i) {
@@ -1052,6 +1062,8 @@ void Add(std::vector<T>& lhs, std::vector<T> const& rhs) {
 
 using TDictInfo = std::unordered_map<std::string, std::string>;
 
+/* This base isn't used for polymorphism - note non-virtual dtor.
+ * It's just to indicate that Setup should- and `Init` could- be overridden. */
 struct TContainerBase {
 	std::string _name;
 	
@@ -1074,7 +1086,7 @@ struct TContainerBase {
 
 /**
  * Encapsulates a type needed to be used as a (de)serialization target
- * from/to RNTuple column. It still is an abstract type, since the `Setup()` method is pure virtual.
+ * from/to RNTuple column. It still is an abstract type, since the `Setup()` method remains pure virtual.
  * Users are at most expected to extend it and define the Setup() method, where the `RegisterObject` methods 
  * will be chained, to give back the raw resource handles to the users' derived container class.
  */
@@ -1258,8 +1270,8 @@ struct TProcessor; /* Undefined. */
 template<typename Out, typename... Ins>
 struct TProcessor<Out(Ins...)> : TProcessorBase {
 	static_assert((std::disjunction_v<
-			mnd::is_base_of_template<TContainer, Ins>,
-			mnd::is_base_of_template<TRawContainer, Ins>> && ...), 
+		mnd::is_base_of_template<TContainer, Ins>,
+		mnd::is_base_of_template<TRawContainer, Ins>> && ...), 
 		"Input type(s) must inherit from (or be) TContainer<T> / TRawContainer<T>.");
 	static_assert(mnd::is_base_of_template<TContainer, Out>::value, "Output type must inherit from (or be) TContainer<T>.");
 
@@ -1346,16 +1358,6 @@ template<u32, typename...> struct TAnalysisPool;
 
 namespace mnd {
 
-template<typename T, typename = void>
-struct has_process_entry : std::false_type {};
-
-template<typename T>
-struct has_process_entry<T, std::void_t<decltype(std::declval<T&>().ProcessEntry())>> 
-	: std::is_same<
-		decltype(std::declval<T&>().ProcessEntry()),
-		void
-	> {};
-
 struct Job { u64 first, last; };
 using JobQueue = boost::lockfree::spsc_queue <
 	Job, boost::lockfree::capacity<8>
@@ -1413,7 +1415,7 @@ inline int GetValidity(const PerThreadReader& reader) {
 
 struct PerThreadWriter {
 	/* Thread [0]'s instance owns the parallelwriter, other threads
-	 * will default to be holding only the raw pointer to it. */
+	 * will default to only holding the raw pointer handle to it. */
 	Variant <
 		std::unique_ptr<RExp::RNTupleParallelWriter>,
 		RExp::RNTupleParallelWriter*
@@ -1727,7 +1729,7 @@ public:
 						this->GetEntry( static_cast<Long64_t>(evId) );
 						
 						std::apply([](auto&... ps) {
-								(..., ps.ProcessEntry()); 
+							(..., ps.ProcessEntry()); 
 						}, this->_proc);
 
 						if(this->_do_write)
@@ -1788,7 +1790,7 @@ private:
 			if(!pwriter_raw)
 				ERROR("RNTupleParallelWriter switched to original state, correct. But pointer is null after creation?");
 		}
-		else { /* ... Or it can be called from the clone. Initial `Clone()` call will set the raw pointer upfront. */
+		else { /* ... Or it can be called from the clone. Initial `Clone()` call will set the raw pointer upfront. Here just check if valid. */
 			if( ! std::holds_alternative<RExp::RNTupleParallelWriter*>(writer.pwriter) )
 				ERROR("RNTupleParallelWriter isn't the original, but clone not switched to raw pointer handle. (%s)", _SELF_TYPE_CSTR);
 			
@@ -1902,8 +1904,8 @@ private:
 			r._tree->SetCacheSize(64*1024*1024);
 
 			
-			 /* TTree API: once we map a branch via `tree->SetBranchAddress(name, &ptr)`, then we can retrieve the pointers'
-			 * address via: tree->GetBranch(name)->GetAddress . The return type is `char**` (?). 
+			 /* TTree API: once we map a branch via `tree->SetBranchAddress(name, &ptr)`, then we can retrieve the pointer's
+			 * address via: tree->GetBranch(name)->GetAddress() . The return type is `char**`. 
 			 * Type safety isn't checked at runtime. Basically the other argument is `void**`somewhere down the line. 
 			 * Checking the type does indeed work, if the underlying type isn't templated.
 			 * It *should* demangle correctly. C++ ABI can change, but it must reflect the same in Cling! */
@@ -1952,9 +1954,9 @@ private:
 								}
 							} // if constexpr
 						}
-					); // loop over input containers, per subprocess
+					); // fold over input containers, per subprocess
 				}
-			); // loop over subprocesses
+			); // fold over subprocesses
 		
 			/* Warm-up. */
 			Long64_t _n_entries = std::min(10LL, r._tree->GetEntries());
@@ -2042,7 +2044,7 @@ template <
 		w._do_write = true;
 	}
 
-	/* On destructor sweep, write the single objects directly in the file. */
+	/* On destructor sweep, write the single objects directly to the file. */
 	~TAnalysisPool() { Collect(); Write(); g_loaded_containers.clear(); }
 
 	/**
@@ -2127,7 +2129,7 @@ template <
 		for(u32 i=0; i<N; ++i) {
 			int n_tries = 0;
 			auto& w = pool[i];
-			mnd::Job job { startingIndex, nLast };
+			mnd::Job job { .first = startingIndex, .last = nLast };
 			while(! w.q.push(job) ) {
 				std::this_thread::yield();
 				++n_tries;
@@ -2164,8 +2166,8 @@ template <
 		u32 next = 0;
 		for(u64 i = 0; i < nentries; i+=NSlice) {
 			mnd::Job j {
-				i,                             // Starting index, included.
-				std::min(i + NSlice, nentries) // Stopping index, excluded.
+				.first = i,                             // Included.
+				.last  = std::min(i + NSlice, nentries) // Excluded.
 			};
 
 			/* Choose a process thread; round-robin. 
