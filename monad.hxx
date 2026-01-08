@@ -107,11 +107,11 @@
 #define _TO_STRING_MND(x) _STR_IMPL_MND(x)
 
 #ifdef __unix__
-#define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+#	define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #elif defined(__WIN32) || defined(WIN32)
-#define __FILENAME__  (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
+#	define __FILENAME__  (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
 #else
-#define __FILENAME__ __FILE__
+#	define __FILENAME__ __FILE__
 #endif
 
 // Regular text.
@@ -234,31 +234,77 @@ inline const char* msg(const char* fmt, ...) {
 	} while(0)
 
 #ifdef _HAS_BOOST_INCLUDE
-#define ERROR(...) do { \
-	YELL(__VA_ARGS__); \
-	fputc('\n', stderr); \
-	std::cerr << boost::stacktrace::stacktrace(); \
-	std::abort(); \
-} while (0)
+#	define ERROR(...) do { \
+		YELL(__VA_ARGS__); \
+		fputc('\n', stderr); \
+		std::cerr << boost::stacktrace::stacktrace(); \
+		std::abort(); \
+	} while (0)
 #else
-#define ERROR(...) do { \
-	YELL(__VA_ARGS__); \
-	fputc('\n', stderr); \
-	std::abort(); \
-} while (0)
+#	define ERROR(...) do { \
+		YELL(__VA_ARGS__); \
+		fputc('\n', stderr); \
+		std::abort(); \
+	} while (0)
 #endif
 
 #define FOR(i, N) \
 	for(int i=0; i < (N); ++i)
 
-#define RUSTIFY_TYPE(N) \
-	using u##N = uint##N##_t; \
-	using i##N = int##N##_t;
+/* An indicator to export certain free functions/aliases to global namespace.
+ * It can confuse ADL, in that case just disable it. */
+#define MND_POLLUTE_G_NAMESPACE
+
+#if defined(MND_POLLUTE_G_NAMESPACE)
+#	define RUSTIFY_TYPE(N) \
+		using u##N = uint##N##_t; \
+		using i##N = int##N##_t;
+#else
+#	define RUSTIFY_TYPE(N) \
+		namespace mnd { \
+			using u##N = uint##N##_t; \
+			using i##N = int##N##_t; \
+		}
+#endif
 
 RUSTIFY_TYPE( 8)
 RUSTIFY_TYPE(16)
 RUSTIFY_TYPE(32)
 RUSTIFY_TYPE(64)
+
+#if !defined(MND_POLLUTE_G_NAMESPACE)
+namespace mnd {
+#endif
+
+template<typename T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& );
+template<typename T, std::size_t N>
+std::ostream& operator<<(std::ostream& os, const std::array<T, N>& );
+/* ^^^ Fwd declared for symbol visiblity in the function below. */
+
+template<typename T>
+std::ostream& mnd_output_homogeneous_range_(std::ostream& os, const T* p, const std::size_t N) {
+	os << '[';
+	if(N > 0) os << p[0];
+    for(std::size_t i = 1; i < N; ++i) {
+		os << ", " << p[i];
+	}
+	os << ']';
+    return os;
+}
+
+template<typename T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
+	return mnd_output_homogeneous_range_(os, v.data(), v.size());
+}
+template<typename T, std::size_t N>
+std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v) {
+	return mnd_output_homogeneous_range_(os, v.data(), v.size());
+}
+
+#if !defined(MND_POLLUTE_G_NAMESPACE)
+}
+#endif
 
 template<typename T, std::size_t N>
 void Add(std::array<T, N>& lhs, std::array<T, N> const& rhs);
@@ -285,7 +331,7 @@ void QuickSwap(std::vector<T>& v, int i, int j) noexcept {
 }
 
 template<typename T>  
-void QuickErase(std::vector<T> &v, int i) noexcept {
+void QuickErase(std::vector<T>& v, int i) noexcept {
     std::swap(v[i], v.back());
     v.pop_back();
 }
@@ -2064,7 +2110,7 @@ template <
 		> refs {};
 
 		for(u32 i=0; i<N; ++i) refs.push_back( &pool[i] );
-		dyadic_fold( refs );
+		dyadic_fold(std::move(refs));
 
 		_is_collected = true;
 	}
@@ -2213,7 +2259,7 @@ private:
 	bool _is_written   { false };
 
 	template<typename T>
-	void dyadic_fold(std::vector<T*> v) {
+	void dyadic_fold(std::vector<T*>&& v) {
 		size_t Nv = v.size();
 		if(Nv & (Nv-1)) ERROR("Dyadic fold container size ill-formed, is %zu, but should be power of 2.", Nv);
 
@@ -2227,7 +2273,7 @@ private:
 			next[i] = v[2*i];
 		}
 
-		dyadic_fold(next);
+		dyadic_fold(std::move(next));
 	}
 };
 
