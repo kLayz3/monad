@@ -43,7 +43,7 @@ It is also possible to only grab the header file.
 ## Short Description and minimal example <a name="min-example"></a>
 The main two abstracted ingredients are called *containers* and *processors*.
 We represent and encapsulate physics data together with a name tag into various *containers*.
-A *processor* then analyses data from input containers and stores it into a single unique output container.
+A *processor* then analyses data from a list of input containers and stores it into a single unique output container.
 
 A *process* is a sequence of processors which represents one *step* of the analysis. Any output container of
 a previous step, becomes input container for the next step.
@@ -87,14 +87,17 @@ struct RNSci {
 };
 
 /* This is our parameter structure, it represents data to be 
- * written only once, not per entry. */
+ * serialized only once, not per entry. */
 struct SCIParam { 
     /* ... */
     virtual ~SCIParam() = default; 
     ClassDef(SCIParam, 1);
 };
 
-/* Structure representing per-entry data for this detector system. */
+/* Structure representing per-entry data for this detector system. 
+ * This will be (one of) the top level columns in the output RNTuple. 
+ * ONLY the `sci` field gets physically encoded, the methods and statics 
+ * are only for us. ROOT doesn't touch them. */
 struct RNFRS {
     constexpr static i32 N_VALID_SCI = 4;
     std::array<RNSci, N_VALID_SCI> sci;
@@ -289,7 +292,7 @@ backbone types, in the jargon of functional programming with a bullet list of us
 Single-object (SO) of type `T` that will go through OWS are wrapped in a `TOnce<T>` type,
 together with an `std::string` label. We expose identical API to both `TObject`-derived
 types and `std::` -like. The constructor of these types is always the underlying `T`'s ctor, with 
-an extra `const char*` initial argument, if type `T` doesn't already handle `(const char*, T&&...)` ctor. 
+an extra `const char*` initial argument, if type `T` doesn't already handle some `(const char*, Ts&&...)` ctor. 
 If in a multithreaded program, the code needs to know how to *stitch* all of the same SO's (from different threads) into one. 
 This problem can be reduced to knowing how to stitch together only two instances at a time.
 For types such as `TH1`-derived, the `TH1::Add(const TH1&)` method already handles this. 

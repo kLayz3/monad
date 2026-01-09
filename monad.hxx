@@ -248,9 +248,6 @@ inline const char* msg(const char* fmt, ...) {
 	} while (0)
 #endif
 
-#define FOR(i, N) \
-	for(int i=0; i < (N); ++i)
-
 /* An indicator to export certain free functions/aliases to global namespace.
  * It can confuse ADL, in that case just disable it. */
 #define MND_POLLUTE_G_NAMESPACE
@@ -286,7 +283,7 @@ template<typename T>
 std::ostream& mnd_output_homogeneous_range_(std::ostream& os, const T* p, const std::size_t N) {
 	os << '[';
 	if(N > 0) os << p[0];
-    for(std::size_t i = 1; i < N; ++i) {
+	for(std::size_t i = 1; i < N; ++i) {
 		os << ", " << p[i];
 	}
 	os << ']';
@@ -307,9 +304,9 @@ std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v) {
 #endif
 
 template<typename T, std::size_t N>
-void Add(std::array<T, N>& lhs, std::array<T, N> const& rhs);
+void Add(std::array<T, N>& lhs, const std::array<T, N>& rhs);
 template<typename T>
-void Add(std::vector<T>& lhs, std::vector<T> const& rhs);
+void Add(std::vector<T>& lhs, const std::vector<T>& rhs);
 
 namespace mnd {
 
@@ -1090,16 +1087,19 @@ namespace mnd {
 }
 
 /* A free function, if type `T` is tucked away behind std::array|vector.
- * This also recurses nicely into std::array< std::array<... >>.
+ * This also recurses nicely into std::array< std::array<... >>, as long as the 
+ * underlying type at the base implements the Add function.
  * Further specializations will over-specialize and this generic overload won't get selected. */
-template<typename T, std::size_t N>
-void Add(std::array<T, N>& lhs, std::array<T, N> const& rhs) {
+template<typename T, std::size_t N,
+	typename std::enable_if<mnd::has_dyadic_add_ref<T>::value>::type* = nullptr
+> void Add(std::array<T, N>& lhs, const std::array<T, N>& rhs) {
 	for(std::size_t i = 0; i < N; ++i) {
 		Add(lhs[i], rhs[i]); 
 	}
 }
-template<typename T>
-void Add(std::vector<T>& lhs, std::vector<T> const& rhs) {
+template<typename T,
+	typename std::enable_if<mnd::has_dyadic_add_ref<T>::value>::type* = nullptr
+> void Add(std::vector<T>& lhs, const std::vector<T>& rhs) {
 	if(lhs.size() != rhs.size())
 		ERROR("Vectors non-equal sized. Sizes: lhs=%zu, rhs=%zu. Cannot safely collect them together.",
 			lhs.size(), rhs.size());
