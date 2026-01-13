@@ -848,7 +848,7 @@ protected:
  *
  *  The collector will sum up all the instances of identical Sum type, 
  *  and make a mean value of all the instances of identical Mean type.
- *  Collecting is done via a dyadic fold, e.g. for 8 instances of TOnce<T> objects:
+ *  Collecting is done via a dyadic (binary) fold, e.g. for 8 instances of TOnce<T> objects:
  *
  *  a0, a1, a2, a3, a4, a5, a6, a7 
  *    \/      \/      \/      \/    
@@ -859,13 +859,26 @@ protected:
  *            a01234567
  *
  * It is done in-place, a0 now carries the summed/mean'ed up value, while the other (N-1)
- * instances carry possibly intermediate calculations, and should not be used. 
- * In the master Pool instantization, it's asserted that N forms a perfect log2 (N == 2^n | ∃n ∈ Naturals).
+ * instances carry possibly intermediate calculations, and should not be used. All together, the transformation 
+ * looks like this:
+ * ▶ a0 → a01234567
+ * ▶ a1 → a1
+ * ▶ a2 → a23
+ * ▶ a3 → a3
+ * ▶ a4 → a4567
+ * ▶ a5 → a5
+ * ▶ a6 → a67
+ * ▶ a7 → a7
+ * 
+ * In the master Pool instantization, it's asserted that N forms a perfect log2: ∃n ∈ ℕ | N == 2^n.
  *
  * To make your type `T` fit into this picture, usual procedure is to define a free function (non-templated;
  * most specific overload) `void Add(T&, const T&)` or `void Mean(T&, const T&)`,
  * Or you supply a custom collector (function pointer) to the constructor of this wrapper type.
- * Passing a function pointer instead will force that specific invocation instead of compiler-deduced one. 
+ * Passing a function pointer instead will force that specific invocation instead of compiler-deduced one
+ * There *might* still be a valid function declaration seen; e.g. on top I declare a free Add symbol for all 
+ * std::array/vector. In case this gives a bad resolution (recursion fails at bottommost non-array type), 
+ * then just define the type-specific no-op yourself (no template shenanigans).
  */
 
 template<typename T> struct TContainer;
@@ -2201,6 +2214,8 @@ template <
 			ref_process.GetEntries(),
 			max_entries
 		);
+		WARN("Starting the analysis with " EMPH1(%lu) 
+			" entries, split over " EMPH1(%u) " workers.\n", nentries, N);
 
 		ROOT::EnableThreadSafety();
 		for(auto& w : pool)
@@ -2369,6 +2384,8 @@ struct TAnalysisPool<1, Processors...> final {
 			process.GetEntries(),
 			max_entries
 		);
+
+		WARN("Starting the analysis with " EMPH1(%lu) " entries.\n", nentries);
 		u64 n_print_every = ((NSlice > 0) ? NSlice : 512); 
 		for(u64 evId = 0; evId < nentries; ++evId) {
 			process.GetEntry( static_cast<Long64_t>(evId) );

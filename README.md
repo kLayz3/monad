@@ -30,7 +30,7 @@ CERN ROOT framework.
 - Multithreading 
   - Split entry pool into chunks, process via *worker pools*
   - Can opt into pure single-threaded for *e.g.* cluster tasks.
-- Columnar data stored in [RNTuple](https://root.cern/doc/master/group__tutorial__ntuple.html) format
+- Entry-wise output data stored in [RNTuple](https://root.cern/doc/master/group__tutorial__ntuple.html) format
 
 Dependencies are C++17, ROOT 6.34+ and [boost](https://www.boost.org/doc/user-guide/getting-started.html).
 
@@ -43,7 +43,8 @@ It is also possible to only grab the header file.
 ## Short Description and minimal example <a name="min-example"></a>
 The main two abstracted ingredients are called *containers* and *processors*.
 We represent and encapsulate physics data together with a name tag into various *containers*.
-A *processor* then analyses data from a list of input containers and stores it into a single unique output container.
+A *processor* then analyses data, per entry, from a list of input containers and 
+stores it into a single unique output container.
 
 A *process* is a sequence of processors which represents one *step* of the analysis. Any output container of
 a previous step, becomes input container for the next step.
@@ -55,18 +56,20 @@ Users are expected to write their own container and processor types which inheri
 base MONAD types, define a few functions and then MONAD handles the rest.
 
 ### Containers <a name="containers"></a>
-A container type encapsulates simultaneously both columnar data (recorded *per entry*) and one or more single-objects (called SO's) 
+A container type encapsulates simultaneously both one column (branch) of tabular dataset, recorded *per entry*, and zero or more single-objects (called SO's) 
 that are written/read only once - such as parameters or histograms.
-To interact with ROOT, each container instance is marked with a unique name tag.
+Each container instance is marked with a unique name tag.
 
-**[1]** Define how you represent the columnar data for this specific analysis sequence/detector. Analogy to branches in a `TTree`.
-Each such type must implement `void Clean() noexcept` method and a [compiled dictionary](https://root.cern/manual/io_custom_classes/).
+**[1]** Define how you represent the per-entry data for this specific analysis sequence/detector. Analogy to a branch in a `TTree`.
+You are free to use inheritence and composition as needed, but mind that each underlying type needs a dictionary.
+Every final container type must implement `void Clean() noexcept` method and a [compiled dictionary](https://root.cern/manual/io_custom_classes/).
 
 A hypothetical example - suppose we wish to analyse data from some scintillators:
 In the file `sci.h` :
 ```cpp
 #include "monad/monad.hxx"
 
+/* Describe how we represent single detector data. */
 struct RNSci {
     struct Measurement {
         double x = NAN;
@@ -86,18 +89,18 @@ struct RNSci {
     ClassDef(RNSciCal, 1);
 };
 
-/* This is our parameter structure, it represents data to be 
- * serialized only once, not per entry. */
-struct SCIParam { 
+/* This is our optional parameter structure representing some data to be 
+ * read/written only once, not per entry. However, it can be mutated per-entry. */
+struct SCIParam {
     /* ... */
     virtual ~SCIParam() = default; 
     ClassDef(SCIParam, 1);
 };
 
-/* Structure representing per-entry data for this detector system. 
- * This will be (one of) the top level columns in the output RNTuple. 
+/* Final structure representing per-entry data for this detector system. 
+ * This will be one of the top level columns in the output RNTuple. 
  * ONLY the `sci` field gets physically encoded, the methods and statics 
- * are only for us. ROOT doesn't touch them. */
+ * are only for us. ROOT doesn't know about them. */
 struct RNFRS {
     constexpr static i32 N_VALID_SCI = 4;
     std::array<RNSci, N_VALID_SCI> sci;
@@ -114,12 +117,13 @@ struct RNFRS {
 into the generic MONAD `TContainer`, and then optionally declare SO's via pointer handles:
 ```cpp
 struct TFRSCont : TContainer<RNFRS> {
-    TFRSCont(); // <-- must have some ctor to give it a name.
+    TFRSCont(); // <-- must have some constructor to give it a name.
     void Setup() override; // <-- must have 
     void Init(TDictInfo info) override; // <-- optional
+    /*        ^^^^^^^^^ using TDictInfo = std::unordered_map<std::string, std::string>; */
 
     /* Declare series of SO's here, via pointer handles. 
-     * Can be left blank if only columnar data needs to be represented. */
+     * Can be left blank if only entry-wise data needs to be represented. */
     std::array<SCIParam, RNFRS::N_VALID_SCI>* sci_param{};
     std::string* parameterFile;
 
@@ -127,9 +131,9 @@ struct TFRSCont : TContainer<RNFRS> {
     TH1I* h1_x_sci_after_target;
 }
 ```
-**[3]** In the file: `sci.cxx`, define the constructors or some other method which names the parent `TContainer`,
-plus optionally the inherited initialization method, for example. The following example will create a column in the output
-RNTuple labelled `FRS` of type `RNFRS`.
+**[3]** In the file: `sci.cxx`, define the constructors or some other method which will name the parent `TContainer` instance,
+plus optionally the inherited `Init` method, for example. The following example will create a column in the output
+RNTuple table labelled `FRS` of type `RNFRS`.
 
 ```cpp
 TFRSCont::TFRSCont() : TContainer("FRS") {}
@@ -145,12 +149,12 @@ using T = std::array<SCIParam, RNFRS::N_VALID_SCI>;
 void Add(T&, const T&) {} // no-op
 
 void TFRSCont::Setup() {
-    /* Arguments in RegisterObject<T> are the same as for T's constructor, if the intial arg is const char*, else
-     * it has a const char* label as the initial argument. */
+    /* Arguments in RegisterObject<T> are the same as for T's constructor, if the intial arg is `const char*`, else
+     * it has a `const char* label` as the initial argument. */
     h1_x_sci_before_target = RegisterObject<TH1I>("h1_x_sci_before_target", "Position (from Scintillator) before target (mm)", 400,-100,100);
     h1_x_sci_after_target = RegisterObject<TH1I>("h1_x_sci_after_target", "Position (from Scintillator) after target (mm)", 400,-100,100);
 
-    /* Collector deduced from the free Add function above. */
+    /* Collector deduced from the free `Add(T&, const T&)` function above. */
     sci_param = RegisterObject<T>("sci_parameters", {});
 
     /* Collector function pointer can given as second argument as well. */
@@ -158,7 +162,7 @@ void TFRSCont::Setup() {
 }
 ```
 
-**[5]** Implement ROOT dictionary for types that will be serialized.
+**[5]** Implement ROOT dictionary for types that will be serialized (written as params/histograms or into the RNTuple).
 
 ```cpp
 ClassImp(RNSci);
@@ -179,7 +183,7 @@ For the same hypothetical example above, we would do the following:
 **[1]** Define your own processor type by wrapping together the
 MONAD base procesor, and one output and one or more input types. Declare
 the two constructors and a `void ProcessEntry() noexcept` method.
-This method will be the entry point to the data mapping, and will be invoked *per event*. 
+This method will be the entry point to the data mapping, and will be invoked per-entry. 
 
 In file `sciproc.h`:
 ```cpp
@@ -193,6 +197,9 @@ struct TFRSProc : TProcessor <
     /* Type alias - isn't necessary but it simplifies syntax. */
     using Base = TProcessor<TFRSCont(TMapCont)>;
 
+    /* This must be the minimal signature, to pass the `out` reference 
+     * and a list of input references (in this case: just `in`) to the base class'
+     * constructor. Other derived class specific arguments can be added after. */
     TFRSProc(TFRSCont& out, const TMapCont& in) :
         TFRSProc::Base(out, in) { /* whatever extra code. */ }
 
@@ -218,6 +225,7 @@ void TFRSProc::ProcessEntry() noexcept {
 void TFRSProc::ProcessSci(int n) {
     RNSCI& sci_obj = this->out.sci[n];
     sci_obj.Clean();
+
     /* Do the actual analysis ... */ 
 }
 ```
@@ -228,7 +236,7 @@ Each step of the analysis is given by a *standalone* program.
 ```cpp
 #include "sciproc.h"
 
-int main(int argc, char** argv) {
+int main(int argc, char* argv[]) {
 ```
 **[1]** Declare your containers, and pass whatever initialization you wish.
 Call their `Setup()` method. `PROG_PATH` is just an example of a preproc directive exported
@@ -249,6 +257,8 @@ of the output `RNTuple`.
 ```
 auto pool = TAnalysisProcess<>(inFile, outFile, "rn_example") // <-- 'bare skeleton' process
     .emplace_process<TFRSProc>(/*TFRSProc ctor:*/ cfrs, mfrs) // <-- now holds just one subprocess
+    // .emplace_process<TXXXProc>(cXXX, mXXX);
+    // .emplace_process<TYYYProc>(cYYY, mYYY);
     .MakePool<8>( 4096 ) // <-- finalize the process, split into 8 subthreads, each will be handled data in chunks of 4096 entries.
 ```
 
@@ -276,7 +286,8 @@ ProgressBar bar {
 all entries in the input root file. Otherwise, if the `indicators/indicators.hh` file is not present, then `maxEvents` becomes
 the first and only (optional) argument. 
 ```
-pool.Start(bar, maxEvents);	
+// pool.Start(bar, maxEvents);
+pool.Start(bar); // <-- analyse all
 ```
 
 **[5]** `pool`'s destructor will automatically write the output file.
@@ -301,7 +312,8 @@ Same function signatures but with `Mean` symbol come next in priority.
 For types where the compiler cannot deduce the collector function, a function pointer `void (*)(T&, const T&)`
 can also be given to handle this. If the function pointer is given, it will take priority over compile-time candidates. 
 The final `TAnalysisPool<...>::Collect()` will
-propagate the corresponding call and effectively perform a binary fold of all the instances of `TOnce<T>` with the same name (that were given to different threads).
+propagate the corresponding call and effectively perform a *binary fold* of all the instances of `TOnce<T>` with the same name (that were given to different threads). Explaination of what exactly binary fold algorithm is is given just before the template definition in the code. 
+If the main `TAnalysisPool<...>` singleton is set in singlethreaded mode, then this folding never even gets compiled!
 
 - `T& operator() ();` returns underlying `T&` handle.
 - `T* operator-> ();` same but for `T*` ; call `T`'s methods via arrow operator.
@@ -311,10 +323,9 @@ Wrapper around `std::shared_ptr<T>` together with a vector of SO handles.
 It also holds an `std::string` label, which shall be the name of the corresponding column in the `RNTuple`.
 The string label of each of the held `TOnce<T>` objects is prefixed with the container label and an underscore.
 It exposes a mixin-style API `U* RegisterObject(const char* name, Ts&& args...)`
-which users call in the derived type to instantiate their corresponding SO's pointer handles of types `U*`.
+which users call in the derived type to instantiate their corresponding SO's and get back respective raw pointer handles `U*`.
 
-`TContainer<T>` is still an abstract type which will be the parent to user defined containers. Children must override the `void Setup()`
-method. In the class definition, for performance reasons, do the cache alignment by adding `alignas(mnd::CL)` after the struct/class keyword.
+`TContainer<T>` is still an abstract type which will be the parent to user defined containers. Derived types must override the `void Setup()` method. In the class definition, for performance reasons, do the cache alignment by adding `alignas(mnd::CL)` after the struct/class keyword.
 
 - `template<typename U, typename... Ts> U* RegisterObject(const char* name, Ts&&... args);`
 - `void Clean();` calls underlying `T`'s `void T::Clean()` method.
@@ -332,21 +343,21 @@ Note that SO deserialization isn't supported in this case.
 - `T* operator->();` same; call `T`'s methods via arrow operator.
 
 ### `TProcessor<Out(Ins...)>` <a name="tprocessor"></a>
-Backbone type used as a parent to the user-defined processor type, where `Out` is an output container type
+Backbone type used as a base type to the user-defined processor type, where `Out` is an output container type
 and `Ins...` is a list of input container types.
 Main constructor is: `explicit TProcessor(Out& , const Ins&...)` which takes ownership of the `Out` instance.
 It is purposefully not marked as rvalue ref (for cleaner API), but once the TProcessor has been handed the `Out&`, it owns it.
 
-Derived types will need to define a default ctor, as well as some `(Out&, const Ins&... /*, others */)` ctor which delegates to this base class ctor. Main purpose of this derived processor type is to define and implement a `void ProcessEntry() noexcept` method which performs the actual analysis.
+Derived types will need to define a default ctor, as well as some `(Out&, const Ins&... /*, others */)` ctor which delegates to this base class ctor. Main purpose of user-derived processor type is to define and implement a `void ProcessEntry() noexcept` method which performs the actual analysis.
 
 - `template<uint32_t N=0> decltype(auto) GetInput();` returns reference to N-th input container.
 - `.out` - access the output container reference.
 
 ### `TAnalysisProcess<Ts...>` <a name="tanalysisprocess"></a>
-Wraps around an `std::tuple<Ts...>` of various `Ts = TProcessor<Out(Ins...)>` instances, together with some IO info, thread object and spsc queue. 
-The monadic (chainable) `emplace_process` method constructs an extended type of `TAnalysisProcess` with the new process stitched to the back of the tuple.
+Wraps around an `std::tuple<Ts...>` of various `Ts ≡ TProcessor<Out(Ins...)>` instances, together with some IO info, thread object and spsc (**s**ingle-**p**roducer-**s**ingle-**c**onsumer) queue. 
+The monadic (chainable) `emplace_process` method constructs an extended type of `TAnalysisProcess` with the new process stitched to the back of the process list.
 
-At the end, a call to `MakePool` will exit this class and hand us back the main `TAnalysisPool` instance.
+At the end, a call to `MakePool` will exit this temporary and hand us back the main `TAnalysisPool` instance.
 
 - `template<typename... Args> auto emplace_process(Args&&... args) && -> TAnalysisProcess<Ts..., U>;`
 - `template<uint32_t N> auto MakePool(u32 NSlice) && -> TAnalysisPool<N, Ts...>;`
@@ -356,7 +367,7 @@ Final type in the composition/inheritance that holds everything together.
 It owns `N > 0` instances of the underlying `TAnalysisProcess<Ts...>` which will be given off one each to its 
 underlying threads. 
 Setting `N == 1` will not fork to a single worker, but instead propagate the analysis only in the main thread (will
-not make `pthread_create()` or similar syscalls). API remains invariant between those two modes.
+not invoke `pthread_create()` or similar syscalls). API remains invariant between those two modes.
 Condition that `N` is a power of 2 is checked.
 
 - `void SendOneBatch(uint32_t n)` send a batch of entries `n` for some initial analysis. This call will not fill
