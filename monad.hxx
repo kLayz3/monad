@@ -173,6 +173,7 @@
 #define EBOLD(x) BOLD #x KNRM
 #define EMPH(x) KBH_YEL #x KNRM
 #define EMPH1(x) KBH_CYN #x KNRM
+#define EMPH2(x) KBH_RED #x KNRM
 
 /* ROOT-like Form() w/o dependency. */
 namespace mnd {
@@ -248,65 +249,31 @@ inline const char* msg(const char* fmt, ...) {
 	} while (0)
 #endif
 
+#define MND_RUSTIFY_TYPE(N) \
+	using u##N = uint##N##_t; \
+	using i##N = int##N##_t;
+
 /* An indicator to export certain free functions/aliases to global namespace.
  * It can confuse ADL, in that case just disable it. */
 #define MND_POLLUTE_G_NAMESPACE
-
-#if defined(MND_POLLUTE_G_NAMESPACE)
-#	define RUSTIFY_TYPE(N) \
-		using u##N = uint##N##_t; \
-		using i##N = int##N##_t;
-#else
-#	define RUSTIFY_TYPE(N) \
-		namespace mnd { \
-			using u##N = uint##N##_t; \
-			using i##N = int##N##_t; \
-		}
-#endif
-
-RUSTIFY_TYPE( 8)
-RUSTIFY_TYPE(16)
-RUSTIFY_TYPE(32)
-RUSTIFY_TYPE(64)
 
 #if !defined(MND_POLLUTE_G_NAMESPACE)
 namespace mnd {
 #endif
 
-template<typename T>
-std::ostream& operator<<(std::ostream& os, const std::vector<T>& );
-template<typename T, std::size_t N>
-std::ostream& operator<<(std::ostream& os, const std::array<T, N>& );
-/* ^^^ Fwd declared for symbol visiblity in the function below. */
-
-template<typename T>
-std::ostream& mnd_output_homogeneous_range_(std::ostream& os, const T* p, const std::size_t N) {
-	os << '[';
-	if(N > 0) os << p[0];
-	for(std::size_t i = 1; i < N; ++i) {
-		os << ", " << p[i];
-	}
-	os << ']';
-    return os;
-}
-
-template<typename T>
-std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
-	return mnd_output_homogeneous_range_(os, v.data(), v.size());
-}
-template<typename T, std::size_t N>
-std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v) {
-	return mnd_output_homogeneous_range_(os, v.data(), v.size());
-}
-
-#if !defined(MND_POLLUTE_G_NAMESPACE)
-}
-#endif
+MND_RUSTIFY_TYPE( 8)
+MND_RUSTIFY_TYPE(16)
+MND_RUSTIFY_TYPE(32)
+MND_RUSTIFY_TYPE(64)
 
 template<typename T, std::size_t N>
 void Add(std::array<T, N>& lhs, const std::array<T, N>& rhs);
 template<typename T>
 void Add(std::vector<T>& lhs, const std::vector<T>& rhs);
+
+#if !defined(MND_POLLUTE_G_NAMESPACE)
+}
+#endif
 
 namespace mnd {
 
@@ -347,6 +314,16 @@ void Append(std::vector<T>& dst, std::vector<T>&& src) noexcept {
 		std::make_move_iterator(src.begin()),
 		std::make_move_iterator(src.end()));
 	/* src vector left in undefined state. */
+}
+
+/* Filter a vector in-place based on the predicate `p`. 
+ * If `p` evaluates to true, element is kicked out. */
+template<typename T, typename Predicate>
+void Erase(std::vector<T>& v, Predicate p) noexcept ( 
+	std::is_nothrow_invocable_v<Predicate&, const T&> && std::is_nothrow_move_assignable_v<T> 	
+	/*^^^ I guess...? How else to check if the underlying block is noexcept? */
+) {
+	v.erase(std::remove_if(v.begin(), v.end(), std::move(p)), v.end());
 }
 
 /* ------------------------- */
@@ -739,10 +716,6 @@ template<typename T,
 	return static_cast<int>(is_an_array<U>::size);	
 }
 
-static inline void Trim(std::string& s) noexcept {
-	s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char c){return std::isspace(c);}), s.end());
-}
-
 /* Returns the name of the type passed, also adding 
  * ref-cv qualifiers. Demangles templated types, too :-) */
 template<typename T,
@@ -870,7 +843,7 @@ protected:
  * ▶ a6 → a67
  * ▶ a7 → a7
  * 
- * In the master Pool instantization, it's asserted that N forms a perfect log2: ∃n ∈ ℕ | N == 2^n.
+ * In the master Pool instantization, it's asserted that N forms a perfect log2: ∃n ∈ ℕ₀ | N == 2^n.
  *
  * To make your type `T` fit into this picture, usual procedure is to define a free function (non-templated;
  * most specific overload) `void Add(T&, const T&)` or `void Mean(T&, const T&)`,
@@ -885,7 +858,7 @@ template<typename T> struct TContainer;
 
 template<typename T>
 struct alignas(mnd::CL) TOnce : TOnceBase {
-	static_assert(! std::is_pointer_v<T>, "Mst not pass pointer type (T*) to TOnce<T>");
+	static_assert(! std::is_pointer_v<T>, "Must not pass pointer type (T*) to TOnce<T>");
 	static_assert(! std::is_fundamental_v<T>, "Must not pass trivial type. Wrap it in e.g. TParameter<T> first.");
 	static_assert(! std::is_void_v<T>, "Hello?");
 	static_assert(! std::is_array_v<T>, "Must not pass raw C-style arrays. Pass an `std::array<T,N>` instead.");
@@ -957,11 +930,12 @@ public:
 	}
 
 	Int_t Write(TFile* f = nullptr, const char* name = "") override {
-		if(!name) ERROR("Don't pass nullptr for `name` in TOnce::Write.");
+		if(!name) ERROR("%s [[ %s ]]. Don't pass nullptr for name arg in TOnce::Write.", _name.c_str(), _SELF_TYPE_CSTR);
 		if(!f || f->IsZombie() || !f->IsOpen()) {
 			f = gDirectory->GetFile();
 			if(!f || f->IsZombie() || !f->IsOpen())
-				ERROR("%s (label: \'%s\') : output ROOT file not supplied or invalid and gDirectory holds no open valid file. (f=0x%016lx)", _name.c_str(), name, (uintptr_t)f);
+				ERROR("%s [[ %s ]] (label: \'%s\') : output ROOT file not supplied or invalid and gDirectory holds no open valid file. (f=0x%016lx)", 
+					_name.c_str(), _SELF_TYPE_CSTR, name, (uintptr_t)f);
 		}
 
 		if constexpr(std::is_base_of_v<TObject, T>)
@@ -1075,7 +1049,11 @@ public:
 			_internal += cvt->operator()();
 			_internal /= 2;
 		}
-		else { // Cannot issue a compile time error, since runtime collector can be provided. 
+		/* This is tricky part. We should not issue a compile time error, since runtime collector can be provided.
+		 * But compiler cannot know this ahead of time. Therefore, in this case issue a runtime error (an std::abort). 
+		 * Now, for generic templates sometime an overload will match the template, but remain undefined, provocing 
+		 * an lderror. This is a TODO. Temporary fix: user-defined strictest overload as a no-op to shut up the compiler. */
+		else { 
 			ERROR("(%s) - Name: '\%s\' ; Underlying type \'%s\' doesn't define how to add or mean-up two instances, "
 					"and also its been constructed without a runtime callback. "
 					"Define a `void Add(T&, const T& )` function or pass a lambda as second argument "
@@ -1121,7 +1099,7 @@ template<typename T,
 
 using TDictInfo = std::unordered_map<std::string, std::string>;
 
-/* This base isn't used for polymorphism - note non-virtual dtor.
+/* This base type isn't just used for polymorphism - note non-virtual dtor.
  * It's just to indicate that Setup should- and `Init` could- be overridden. */
 struct TContainerBase {
 	std::string _name;
@@ -1278,7 +1256,7 @@ public:
 template<typename T>
 struct TRawContainer : TContainerBase {
 	static_assert(!std::is_void_v<T>, "Hello?");
-	static_assert(!mnd::is_an_array_v<T>, "Must not pass raw C-style array or `std::array<T,N>`.");
+	static_assert(!std::is_array_v<T>, "Must not pass raw C-style array. Prefer `std::array<T,N>` instead.");
 	static_assert(!std::is_pointer_v<T>, "Must not pass pointer type (T*).");
 	static_assert(!std::is_reference_v<T>, "Must not pass ref type (T&).");
 	
@@ -1322,9 +1300,9 @@ template<typename>
 struct TProcessor; /* Undefined. */
 
 /**
- * Base class of a single analysis subprocess.
- * Children will implement `ProcessEntry(...)` method to map the data
- * from combination of Input structures (type `Ins...` to the one unique Output (type `Out`) structure.
+ * Base type of a single analysis subprocess.
+ * User-derived types will implement `void ProcessEntry() noexcept` method to map the data
+ * from combination of input structures (types: `Ins...`) to the one unique output (type `Out`) structure.
  */
 template<typename Out, typename... Ins>
 struct TProcessor<Out(Ins...)> : TProcessorBase {
@@ -1931,7 +1909,7 @@ private:
 										typename ContType::inner_type
 									> ( cont.GetName() );	
 								} catch(...) {
-									ERROR("Unknown exception caught? When trying to assing RNTuple column. (%s)",
+									ERROR("Unknown exception caught? When trying to accessing RNTuple column. (%s)",
 										mnd::type_name<ContType>().c_str());
 								}
 							}
@@ -2385,7 +2363,7 @@ struct TAnalysisPool<1, Processors...> final {
 			max_entries
 		);
 
-		WARN("Starting the analysis with " EMPH1(%lu) " entries.\n", nentries);
+		WARN("Starting the singlethreaded analysis with " EMPH1(%lu) " entries.\n", nentries);
 		u64 n_print_every = ((NSlice > 0) ? NSlice : 512); 
 		for(u64 evId = 0; evId < nentries; ++evId) {
 			process.GetEntry( static_cast<Long64_t>(evId) );
