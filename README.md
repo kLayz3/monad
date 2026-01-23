@@ -6,6 +6,7 @@
 - [Minimal Example and Description](#min-example)
   - [Containers](#containers)
   - [Processors](#processors)
+  - [LinkDef.h](#linkdef)
   - [Main program](#main-program)
 - [Detailed Description](#detailed-descr)
   - [`TOnce`](#tonce)
@@ -229,8 +230,8 @@ void TFRSProc::ProcessSci(int n) {
     /* Do the actual analysis ... */ 
 }
 ```
-### `LinkDef.h` file
-Specify the targets for rootcling in a `LinkDef.h` file, to compile-in both
+### `LinkDef.h` file <a name="linkdef"></a>
+Specify the targets for rootcling in the `LinkDef.h` file, to compile-in both
 the dictionary and the streamer functionalities.
 
 ```cpp
@@ -242,6 +243,7 @@ the dictionary and the streamer functionalities.
 #pragma link C++ class RNSci::Measurement+;
 #pragma link C++ class RNFRS+;
 #pragma link C++ class SCIParam+;
+#endif
 ```
 
 ### Main program <a name="main-program"></a>
