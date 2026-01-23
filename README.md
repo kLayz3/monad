@@ -229,6 +229,20 @@ void TFRSProc::ProcessSci(int n) {
     /* Do the actual analysis ... */ 
 }
 ```
+### `LinkDef.h` file
+Specify the targets for rootcling in a `LinkDef.h` file, to compile-in both
+the dictionary and the streamer functionalities.
+
+```cpp
+#ifdef __CLING__
+#pragma link C++ nestedclasses;
+#pragma link C++ nestedtypedefs;
+
+#pragma link C++ class RNSci+;
+#pragma link C++ class RNSci::Measurement+;
+#pragma link C++ class RNFRS+;
+#pragma link C++ class SCIParam+;
+```
 
 ### Main program <a name="main-program"></a>
 Each step of the analysis is given by a *standalone* program.

@@ -418,6 +418,8 @@ using Empty = std::monostate;
 template<typename T>
 using Maybe = std::optional<T>;
 
+inline constexpr auto None = std::nullopt;
+
 template<typename... Ts>
 using Variant = std::variant<Empty, Ts...>;
 
@@ -851,7 +853,7 @@ protected:
  * Passing a function pointer instead will force that specific invocation instead of compiler-deduced one
  * There *might* still be a valid function declaration seen; e.g. on top I declare a free Add symbol for all 
  * std::array/vector. In case this gives a bad resolution (recursion fails at bottommost non-array type), 
- * then just define the type-specific no-op yourself (no template shenanigans).
+ * then just define the type-specific no-op overload yourself (no template shenanigans).
  */
 
 template<typename T> struct TContainer;
@@ -986,7 +988,7 @@ public:
 			copy = std::make_unique<TOnce<T>>( this->GetName() );
 
 			if constexpr(mnd::has_copy<T>::value)
-				this->_internal.Copy(*copy);
+				this->_internal.Copy(copy->_internal);
 
 			else { /* virtual TObject* Clone(const char *newname="") const */
 				if constexpr(mnd::has_set_directory<T>::value) /* Reassigning the unique_ptr must not double-free. */
@@ -1077,6 +1079,10 @@ namespace mnd {
 	}
 }
 
+#if !defined(MND_POLLUTE_G_NAMESPACE)
+namespace mnd {
+#endif
+
 /* A free function, if type `T` is tucked away behind std::array|vector.
  * This also recurses nicely into std::array< std::array<... >>, as long as the 
  * underlying type at the base implements the Add function.
@@ -1096,6 +1102,10 @@ template<typename T,
 			lhs.size(), rhs.size());
 	for(std::size_t i = 0; i < lhs.size(); ++i) { Add(lhs[i], rhs[i]); }
 }
+
+#if !defined(MND_POLLUTE_G_NAMESPACE)
+}
+#endif
 
 using TDictInfo = std::unordered_map<std::string, std::string>;
 
