@@ -995,7 +995,7 @@ public:
 					copy->_internal.SetDirectory(nullptr);
 
 				/* This calls case [5] ctor of TOnce<T> */
-				copy = std::make_unique<TOnce<T>> (this->GetName(), this->_collector,
+				copy = std::make_unique<TOnce<T>> (this->GetName(),
 						/* T&& */ *static_cast<T*>( _internal.Clone(this->GetName()) )
 						);
 
@@ -1016,6 +1016,7 @@ public:
 				"and doesn't have copy ctor or copy-assignment operator to clone from!");
 		}
 
+		copy->_collector = this->_collector;
 		return copy;
 	}
  
@@ -2212,7 +2213,7 @@ template <
 #ifdef __HAS_INDICATORS
 		indicators::show_console_cursor(false);
 #endif
-		u32 next = 0;
+		auto& w = pool[0]; u32 next = 0;
 		for(u64 i = 0; i < nentries; i+=NSlice) {
 			mnd::Job j {
 				.first = i,                             // Included.
@@ -2221,7 +2222,7 @@ template <
 
 			/* Choose a process thread; round-robin. 
 			 * If currently selected thread has capped queue, do a short spin and try next one. */
-			for(auto& w = pool[next]; ! w.q.push(j); ++next, next %= N) {
+			for(; w = pool[next], !w.q.push(j); ++next, next %= N) {
 #ifdef __HAS_SMALL_INTEL_SPIN
 				_mm_pause(); /* Short pause, 100-150 clock cycles. */
 #else
@@ -2229,7 +2230,7 @@ template <
 #endif
 			}
 #ifdef __HAS_INDICATORS
-			mnd::PrintProgress(bar, j.last, nentries, NSlice-1 );
+			mnd::PrintProgress(bar, j.last, nentries, NSlice-1);
 #endif
 		}
 

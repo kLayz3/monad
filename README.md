@@ -103,7 +103,7 @@ struct SCIParam {
  * ONLY the `sci` field gets physically encoded, the methods and statics 
  * are only for us. ROOT doesn't know about them. */
 struct RNFRS {
-    constexpr static i32 N_VALID_SCI = 4;
+    constexpr static int N_VALID_SCI = 4;
     std::array<RNSci, N_VALID_SCI> sci;
 
     inline void Clean() noexcept { // <--- must have this method 
@@ -117,6 +117,7 @@ struct RNFRS {
 **[2]** Wrap your type that will represent a column in `RNTuple` 
 into the generic MONAD `TContainer`, and then optionally declare SO's via pointer handles:
 ```cpp
+/* sci.h */
 struct TFRSCont : TContainer<RNFRS> {
     TFRSCont(); // <-- must have some constructor to give it a name.
     void Setup() override; // <-- must have 
@@ -132,20 +133,22 @@ struct TFRSCont : TContainer<RNFRS> {
     TH1I* h1_x_sci_after_target;
 }
 ```
-**[3]** In the file: `sci.cxx`, define the constructors or some other method which will name the parent `TContainer` instance,
+**[3]** In the file `sci.cxx`, define the constructors or some other method which will name the parent `TContainer` instance,
 plus optionally the inherited `Init` method, for example. The following example will create a column in the output
 RNTuple table labelled `FRS` of type `RNFRS`.
 
 ```cpp
+/* sci.cxx */
 TFRSCont::TFRSCont() : TContainer("FRS") {}
 void TFRSCont::Init(TDictInfo info) { /* ... */ }
 ```
 
-**[4]** Implement the `void Setup()` method, where you define the SO's by name and their underlying type's constructor. Note that 
+**[4]** In the same file, implement the `void Setup()` method, where you define the SO's by name and their underlying type's constructor. Note that 
 the multithreaded collector (more about it later) needs to know how to *sum up* or *average out* two instances
 of a SO-type. For `TH1*` types, it is provided by default.
 
 ```cpp
+/* sci.cxx */
 using T = std::array<SCIParam, RNFRS::N_VALID_SCI>;
 void Add(T&, const T&) {} // no-op
 
@@ -166,6 +169,7 @@ void TFRSCont::Setup() {
 **[5]** Implement ROOT dictionary for types that will be serialized (written as params/histograms or into the RNTuple).
 
 ```cpp
+/* sci.cxx */
 ClassImp(RNSci);
 ClassImp(RNSci::Measurement);
 ClassImp(RNFRS);
@@ -182,7 +186,7 @@ are allocated and filled only once per event.
 For the same hypothetical example above, we would do the following:
 
 **[1]** Define your own processor type by wrapping together the
-MONAD base procesor, and one output and one or more input types. Declare
+MONAD base procesor, one output, and one or more input types. Declare
 the two constructors and a `void ProcessEntry() noexcept` method.
 This method will be the entry point to the data mapping, and will be invoked per-entry. 
 
