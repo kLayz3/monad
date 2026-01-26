@@ -2213,7 +2213,7 @@ template <
 #ifdef __HAS_INDICATORS
 		indicators::show_console_cursor(false);
 #endif
-		auto& w = pool[0]; u32 next = 0;
+		auto* w = &pool[0]; u32 next = 0;
 		for(u64 i = 0; i < nentries; i+=NSlice) {
 			mnd::Job j {
 				.first = i,                             // Included.
@@ -2222,7 +2222,7 @@ template <
 
 			/* Choose a process thread; round-robin. 
 			 * If currently selected thread has capped queue, do a short spin and try next one. */
-			for(; w = pool[next], !w.q.push(j); ++next, next %= N) {
+			for(; w = &pool[next], !w->q.push(j); ++next, next %= N) {
 #ifdef __HAS_SMALL_INTEL_SPIN
 				_mm_pause(); /* Short pause, 100-150 clock cycles. */
 #else
