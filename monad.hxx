@@ -1055,7 +1055,9 @@ public:
 		/* This is tricky part. We should not issue a compile time error, since runtime collector can be provided.
 		 * But compiler cannot know this ahead of time. Therefore, in this case issue a runtime error (an std::abort). 
 		 * Now, for generic templates sometime an overload will match the template, but remain undefined, provocing 
-		 * an lderror. This is a TODO. Temporary fix: user-defined strictest overload as a no-op to shut up the compiler. */
+		 * an lderror. This is a TODO. Temporary fix: user-defined strictest overload as a no-op to shut up the compiler. 
+		 * IDK, maybe define and catch last-resort a generic symbol: 
+		 * template<typename T> void AddG_(T&, const T&) {} ? Then warn users that the code flow bounces here I guess. */
 		else { 
 			ERROR("(%s) - Name: '\%s\' ; Underlying type \'%s\' doesn't define how to add or mean-up two instances, "
 					"and also its been constructed without a runtime callback. "
