@@ -80,6 +80,7 @@
 #else /* >= 63600 */
 	namespace RExp = ROOT;
 #endif
+namespace RExp2 = ROOT::Experimental;
 
 #if __has_include("boost/stacktrace.hpp")
 #   define _HAS_BOOST_INCLUDE
@@ -1467,16 +1468,16 @@ struct PerThreadWriter {
 	/* Thread [0]'s instance owns the parallelwriter, other threads
 	 * will default to only holding the raw pointer handle to it. */
 	Variant <
-		std::unique_ptr<RExp::RNTupleParallelWriter>,
-		RExp::RNTupleParallelWriter*
+		std::unique_ptr<RExp2::RNTupleParallelWriter>,
+		RExp2::RNTupleParallelWriter*
 	> pwriter;
-	std::shared_ptr<RExp::RNTupleFillContext> ctx;
+	std::shared_ptr<RExp2::RNTupleFillContext> ctx;
 	std::unique_ptr<RExp::REntry> entry;
 
 	void Reset() {
 		entry.reset();
 		ctx.reset();
-		auto* p = std::get_if<std::unique_ptr<RExp::RNTupleParallelWriter>>(&pwriter);
+		auto* p = std::get_if<std::unique_ptr<RExp2::RNTupleParallelWriter>>(&pwriter);
 		if(p != nullptr)
 			p->reset();
 	}
@@ -1493,11 +1494,11 @@ struct PerThreadWriter {
 		int r = 0;
 		if(IsEmpty(pwriter)) r |= 0x1;
 		else if ( /* Try to cast to 1st type instance. */
-			auto* p = std::get_if<std::unique_ptr<RExp::RNTupleParallelWriter>>(&pwriter);
+			auto* p = std::get_if<std::unique_ptr<RExp2::RNTupleParallelWriter>>(&pwriter);
 			p != nullptr && *p == nullptr 
 		)                          r |= 0x2;
 		else if ( /* Try to cast to 2nd type instance. */
-			auto* p = std::get_if<RExp::RNTupleParallelWriter*>(&pwriter);
+			auto* p = std::get_if<RExp2::RNTupleParallelWriter*>(&pwriter);
 			p != nullptr && *p == nullptr 
 		)                          r |= 0x2;
 		if(! ctx)                  r |= 0x4;
@@ -1659,7 +1660,7 @@ public:
 	 * with clones of the initial processor object. 
 	 */
 	void Clone(TAnalysisProcess& dest) const { /* Only clone from the original object. */
-		auto* p = std::get_if<std::unique_ptr<RExp::RNTupleParallelWriter>>(&writer.pwriter);
+		auto* p = std::get_if<std::unique_ptr<RExp2::RNTupleParallelWriter>>(&writer.pwriter);
 		/*^^^ type: std::unique_ptr<..> *  */
 		if(!p) ERROR("Calling clone but original processor object is either unitialized or set to wrong state. "
 				"State = %zu, 0 = Empty; 1 = Owning pointer; 2 = Raw pointer. Should be: " EMPH(1\n), writer.pwriter.index());
@@ -1821,7 +1822,7 @@ private:
 		if(writer.ctx || writer.entry) 
 			ERROR("RNTupleWriter, context or entry already given (non-null)? (%s)", _SELF_TYPE_CSTR);
 
-		RExp::RNTupleParallelWriter* pwriter_raw;
+		RExp2::RNTupleParallelWriter* pwriter_raw;
 		
 		/* Writer can be set up either from the original, which means we set up the bare model. */
 		if(mnd::IsEmpty(writer.pwriter)) {
@@ -1835,16 +1836,16 @@ private:
 					model->MakeField<typename decltype(p.out)::inner_type>( name );
 				}
 			);
-			writer.pwriter = RExp::RNTupleParallelWriter::Recreate(std::move(model), info.out.out_rnname, info.out.fname);
-			pwriter_raw = std::get<std::unique_ptr<RExp::RNTupleParallelWriter>> (writer.pwriter).get();
+			writer.pwriter = RExp2::RNTupleParallelWriter::Recreate(std::move(model), info.out.out_rnname, info.out.fname);
+			pwriter_raw = std::get<std::unique_ptr<RExp2::RNTupleParallelWriter>> (writer.pwriter).get();
 			if(!pwriter_raw)
 				ERROR("RNTupleParallelWriter switched to original state, correct. But pointer is null after creation?");
 		}
 		else { /* ... Or it can be called from the clone. Initial `Clone()` call will set the raw pointer upfront. Here just check if valid. */
-			if( ! std::holds_alternative<RExp::RNTupleParallelWriter*>(writer.pwriter) )
+			if( ! std::holds_alternative<RExp2::RNTupleParallelWriter*>(writer.pwriter) )
 				ERROR("RNTupleParallelWriter isn't the original, but clone not switched to raw pointer handle. (%s)", _SELF_TYPE_CSTR);
 			
-			pwriter_raw = std::get<RExp::RNTupleParallelWriter*>(writer.pwriter);
+			pwriter_raw = std::get<RExp2::RNTupleParallelWriter*>(writer.pwriter);
 			if(!pwriter_raw)
 				ERROR("RNTupleParallelWriter switched to clone state, correct. But pointer is null?");
 		}
@@ -2021,7 +2022,7 @@ private:
 		const char* fname = info.in.fname.c_str();
 		auto f = std::make_unique<TFile>(fname, "READ");
 		if(!f)            ERROR("Bad input file handle: %s", fname); 
-		if(f->IsZombie()) ERROR("Input file %s can be read, but is zombied. Is it used somewhere else?", fname);
+		if(f->IsZombie()) ERROR("Input file %s can be read, but is zombied. Is it open somewhere else, or the disk is misbehaving?", fname);
 		if(!f->IsOpen())  ERROR("Input file %s can be read, but isn't opened. Is it used somewhere else?", fname);
 
 		if(g_loaded_containers.find(cont._name) == g_loaded_containers.end()) {
