@@ -396,4 +396,4 @@ the output trees (but *can* fill the SO's).
 out to workers via round-robin, populating their respective spsc queue with 'job requests'.
 
 ## Example of usage <a name="phd"></a>
-Broad usage of MONAD is in [author's PhD analysis code](https://git.gsi.de/m.bajzek/sec-s118/-/tree/dev2/).
+Broad usage of MONAD is in [author's PhD analysis code](https://git.gsi.de/m.bajzek/sec-s118).

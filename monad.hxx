@@ -2033,7 +2033,7 @@ private:
 		const char* fname = info.in.fname.c_str();
 		auto f = std::make_unique<TFile>(fname, "READ");
 		if(!f)            ERROR("Bad input file handle: %s", fname); 
-		if(f->IsZombie()) ERROR("Input file %s can be read, but is zombied. Is it open somewhere else, or the disk is misbehaving?", fname);
+		if(f->IsZombie()) ERROR("Input file %s can be read, but is zombied. You sure path is correct? Or is it open somewhere else, or the disk is misbehaving?", fname);
 		if(!f->IsOpen())  ERROR("Input file %s can be read, but isn't opened. Is it used somewhere else?", fname);
 
 		if(g_loaded_containers.find(cont._name) == g_loaded_containers.end()) {
