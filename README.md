@@ -397,3 +397,10 @@ out to workers via round-robin, populating their respective spsc queue with 'job
 
 ## Example of usage <a name="phd"></a>
 Broad usage of MONAD is in [author's PhD analysis code](https://git.gsi.de/m.bajzek/sec-s118).
+
+## Todo ideas:
+- Pin the workers' threads to a close NUMA node? 
+  - Is it really worth it? The only channel is the `spsc_queue` and for that it doesn't matter much?
+  - Far more problematic is the context switching if task gets repinned somewhere else...
+
+- An API to allow a `TOnce<T>` writer without needing an output column
