@@ -685,7 +685,7 @@ template<typename T,
 > auto median(const T& sorted_arr) noexcept { return ( sorted_arr[N/2] + sorted_arr[N/2 - 1] ) / 2; }
 
 template<typename T, typename... Ts>
-constexpr auto min(T t, Ts... ts) {
+constexpr auto min(T t, Ts... ts) noexcept {
 	static_assert(std::is_arithmetic_v<
 		std::remove_reference_t<T>
 	> &&
@@ -699,7 +699,7 @@ constexpr auto min(T t, Ts... ts) {
 	return r;
 }
 template<typename T, typename... Ts>
-constexpr auto max(T t, Ts... ts) {
+constexpr auto max(T t, Ts... ts) noexcept {
 	static_assert(std::is_arithmetic_v<
 		std::remove_reference_t<T>
 	> &&
@@ -715,7 +715,7 @@ constexpr auto max(T t, Ts... ts) {
 
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>
-> constexpr int FindIndex(const T& arr, const typename is_an_array<U>::value_type& val) {
+> constexpr int FindIndex(const T& arr, const typename is_an_array<U>::value_type& val) noexcept {
 	static_assert(is_an_array_v<U>, "Type T must be a C-style array or \'std::array<T,N>\'");
 	constexpr std::size_t N = is_an_array<U>::size;
 	for(int i=0; i < (int)N; ++i)
@@ -725,7 +725,7 @@ template<typename T,
 
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>
-> constexpr int len(const T& arr) {
+> constexpr int len(const T& arr) noexcept {
 	static_assert(is_an_array_v<U>, "Passed type must either be an array reference `T (&)[N]` or `std::array<T,N>&` .");
 	return static_cast<int>(is_an_array<U>::size);	
 }
