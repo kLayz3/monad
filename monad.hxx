@@ -746,14 +746,14 @@ template<typename T,
 	);
 	std::string r = (own) ? own.get() : typeid(U).name();
 	if constexpr(std::is_const_v<T>)
-        r += " const";
-    if constexpr(std::is_volatile_v<T>)
-        r += " volatile";
-    if constexpr(std::is_lvalue_reference_v<T>)
-        r += "&";
-    else if constexpr(std::is_rvalue_reference_v<T>)
-        r += "&&";
-    return r;
+		r += " const";
+	if constexpr(std::is_volatile_v<T>)
+		r += " volatile";
+	if constexpr(std::is_lvalue_reference_v<T>)
+		r += "&";
+	else if constexpr(std::is_rvalue_reference_v<T>)
+		r += "&&";
+	return r;
 }
 
 #define _SELF_TYPE_CSTR \
@@ -767,7 +767,7 @@ template<typename T,
  * and in Linux shell execute 'tput cnorm' to get the cursor back. */
 inline void sig_callback_handler(int signum) {
 	const char show[] = "\x1b[?25h";
-    const char nl   = '\n';
+	const char nl   = '\n';
 	write(STDERR_FILENO, &nl, 1);
 	write(STDERR_FILENO, show, sizeof show - 1);
 	WARN_ASYNC("Caught abort/seg signal [%d].\n", signum);
@@ -1008,8 +1008,7 @@ public:
 
 				/* This calls case [5] ctor of TOnce<T> */
 				copy = std::make_unique<TOnce<T>> (this->GetName(),
-						/* T&& */ *static_cast<T*>( _internal.Clone(this->GetName()) )
-						);
+						/* T&& */ *static_cast<T*>( _internal.Clone(this->GetName()) ));
 
 				if constexpr(mnd::has_set_directory<T>::value) /* Reassigning the unique_ptr must not double-free. */
 					copy->_internal.SetDirectory(nullptr);
@@ -1035,7 +1034,8 @@ public:
 	void Collect(const TOnceBase& rhs) override {
 		const TOnce<T>* cvt = dynamic_cast<const TOnce<T>*> (&rhs);
 
-		if( !cvt) ERROR("Type: %s, wrapped type: %s. TOnce object name \'%s\'. In Collect(..) - dynamic cast failed. "
+		if( !cvt) 
+			ERROR("Type: %s, wrapped type: %s. TOnce object name \'%s\'. In Collect(..) - dynamic cast failed. "
 				"RHS is named \'%s\'", _SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
 				this->GetName(), rhs.GetName());
 
