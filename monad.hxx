@@ -1130,7 +1130,7 @@ struct TContainerBase {
 	std::string _name;
 	
 	inline const char* GetName() const noexcept { return _name.c_str(); }
-	inline void SetName(std::string(name)) noexcept { _name = std::move(name); }
+	inline void SetName(std::string name) noexcept { _name = std::move(name); }
 
 	TContainerBase() = default;
 	TContainerBase(std::string name) : _name(std::move(name)) {}
