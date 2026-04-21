@@ -440,6 +440,8 @@ constexpr bool IsEmpty(const Variant<Ts...>& v) {
 	return v.valueless_by_exception() or std::holds_alternative<Empty>(v);
 }
 
+enum class BinaryOpt : i32 { No = 0, Yes = 1 };
+
 /**
  * Apply 'std::visit' https://en.cppreference.com/w/cpp/utility/variant/visit2.html
  * to the mnd::Variant type. Throws if the 'mnd::Empty' type is encountered. 
