@@ -22,6 +22,7 @@
 #ifndef __MONAD_INCLUDE_HXX__
 #define __MONAD_INCLUDE_HXX__
 
+#include <cmath>
 #include <cstdint>
 #include <cstdarg> 
 #include <cstdlib>
@@ -341,6 +342,12 @@ bool IsInside(const T& value, const std::array<U,N>& bounds) {
 		"T and U must support comparison operators U <= T and T < U."
 	);
 	return bounds[N-2] <= value and value < bounds[N-1];
+}
+
+template<typename T, std::size_t N>
+bool IsValid(const std::array<T,N>& bounds) {
+	static_assert(N >= 2, "Array size must be >= 2");
+	return std::isfinite(bounds[N-2]) and std::isfinite(bounds[N-1]);
 }
 
 using std::chrono::duration_cast;
