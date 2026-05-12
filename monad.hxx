@@ -344,24 +344,30 @@ bool IsInside(const T& value, const std::array<U,N>& bounds) {
 	return bounds[N-2] <= value and value < bounds[N-1];
 }
 
+/* Geometric predicate. */
+template <
+	typename T = double,
+	typename Value = std::array<T,2>,
+	typename Bound = std::array<Value,2>
+> bool IsInside(const Value value, const Bound& bounds) {
+	return mnd::IsInside(value[0], bounds[0]) and mnd::IsInside(value[1], bounds[1]); 
+}
+
 template<typename T, std::size_t N>
 bool IsValid(const std::array<T,N>& bounds) {
 	static_assert(N >= 2, "Array size must be >= 2");
 	return std::isfinite(bounds[N-2]) and std::isfinite(bounds[N-1]);
 }
 
-using std::chrono::duration_cast;
-using std::chrono::seconds;
-using std::chrono::milliseconds;
-
-#define timeNow() std::chrono::high_resolution_clock::now()
 struct TimePoint {
 	std::chrono::high_resolution_clock::time_point t;
 	std::string tag;
+	
+	auto timeNow() const { return std::chrono::high_resolution_clock::now(); }
+	
 	TimePoint() : t(timeNow()), tag("?") {};
 	TimePoint(std::string s) : t(timeNow()), tag(s) {};
 };
-#undef timeNow
 
 enum TimingVariant : u64 {
 	kMINUTE = 1,
