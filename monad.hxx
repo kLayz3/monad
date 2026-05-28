@@ -27,6 +27,7 @@
 #include <cstdarg> 
 #include <cstdlib>
 #include <cstdio>
+#include <cassert>
 
 #include <iostream>
 #include <string>
@@ -81,7 +82,13 @@
 #else /* >= 63600 */
 	namespace RExp = ROOT;
 #endif
-namespace RExp2 = ROOT::Experimental;
+
+#if ROOT_VERSION_CODE < ROOT_VERSION(6,37,0)
+	namespace RExp2 = ROOT::Experimental;
+#else
+	namespace RExp2 = ROOT;
+#endif
+
 
 #if __has_include("boost/stacktrace.hpp")
 #   define _HAS_BOOST_INCLUDE
@@ -146,7 +153,7 @@ namespace RExp2 = ROOT::Experimental;
 #define KU_CYN "\e[4;36m"
 #define KU_WHT "\e[4;37m"
 
-// High intensty text.
+// High intensity text.
 #define KH_BLK "\e[0;90m"
 #define KH_RED "\e[0;91m"
 #define KH_GRN "\e[0;92m"
@@ -166,10 +173,21 @@ namespace RExp2 = ROOT::Experimental;
 #define KBH_CYN "\e[1;96m"
 #define KBH_WHT "\e[1;97m"
 
+// Bright backgrounds.
+#define BKH_BLK "\e[100m"
+#define BKH_RED "\e[101m"
+#define BKH_GRN "\e[102m"
+#define BKH_YEL "\e[103m"
+#define BKH_BLU "\e[104m"
+#define BKH_MAG "\e[105m"
+#define BKH_CYN "\e[106m"
+#define BKH_WHT "\e[107m"
+
 // Reset.
 #define KRNM "\e[0m"
 #define KNRM "\e[0m"
 #define COLOR_RESET "\e[0m"
+#define KBLINK  "\e[5m"
 
 #define BOLD "\e[1m"
 #define EBOLD(x) BOLD #x KNRM
@@ -203,6 +221,10 @@ inline const char* msg(const char* fmt, ...) {
 
 	return buffer.c_str();
 }
+inline void safe_write(int fd, const char* s, size_t n) noexcept {
+	ssize_t r = ::write(fd, s, n);
+	(void)r; // ignored; to shutup GCC's ‘warn_unused_result’ [-Wunused-result]
+}
 }
 
 #define YELL(...) \
@@ -225,9 +247,9 @@ inline const char* msg(const char* fmt, ...) {
 #define WARN_ASYNC(...) \
 	do { \
 		const char* msg_ = mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILENAME__, __LINE__); \
+		mnd::safe_write(STDERR_FILENO, msg_, strlen(msg_)); \
 		const char* msg_v_ = mnd::msg(__VA_ARGS__); \
-		write(STDERR_FILENO, msg_, strlen(msg_)); \
-		write(STDERR_FILENO, msg_v_, strlen(msg_v_)); \
+		mnd::safe_write(STDERR_FILENO, msg_v_, strlen(msg_v_)); \
 	} while (0);
 
 #define println(...) \
@@ -249,6 +271,32 @@ inline const char* msg(const char* fmt, ...) {
 		fputc('\n', stderr); \
 		std::abort(); \
 	} while (0)
+#endif
+
+#ifdef MND_DEBUG_ENABLED
+#	define MND_ASSERT(expr) \
+		do { \
+			if(!(expr)) { \
+				std::cerr \
+					<< "Assertion failed: " #expr \
+					<< "\nFile: " << __FILE__  \
+					<< ":" << __LINE__ \
+					<< "\n\nStacktrace:\n" \
+					<< boost::stacktrace::stacktrace() \
+					<< std::endl; \
+				std::abort(); \
+			} \
+		} while(0)
+
+#	undef assert
+#	undef eigen_assert
+
+#	define assert(expr) MND_ASSERT(expr)
+#	define eigen_assert(expr) MND_ASSERT(expr) 
+#else
+
+#	define MND_ASSERT(expr) assert(expr) 
+		
 #endif
 
 #define MND_RUSTIFY_TYPE(N) \
@@ -577,6 +625,18 @@ struct has_add_unary_op<T, std::void_t<
 >> : std::true_type {};
 
 template<typename T, typename = void>
+struct has_add_binary_op : std::false_type {};
+template<typename T>
+struct has_add_binary_op<T, std::void_t<
+	decltype( std::declval<T>() + std::declval<T>() )
+>> : std::bool_constant<
+	std::is_convertible_v<
+		decltype( std::declval<T>() + std::declval<T>() ),
+		T
+	>
+> {};
+
+template<typename T, typename = void>
 struct has_free_mean_fn : std::false_type {};
 template<typename T>
 struct has_free_mean_fn<T, std::void_t<
@@ -688,6 +748,8 @@ template<typename T,
 		return std::filesystem::path(std::forward<T>(arg)).string();
 }
 
+/* Following small algorithms should be expanded to general indexable range,
+ * not just arrays. It's a TODO. */
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
 	std::size_t N = is_an_array<U>::size,
@@ -728,7 +790,6 @@ constexpr auto max(T t, Ts... ts) noexcept {
 	((r = std::max<R>(r, static_cast<R>(ts))), ...);
 	return r;
 }
-
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>
 > constexpr int FindIndex(const T& arr, const typename is_an_array<U>::value_type& val) noexcept {
@@ -738,13 +799,21 @@ template<typename T,
 		if(arr[i] == val) return i;
 	return -1;
 }
-
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>
 > constexpr int len(const T& arr) noexcept {
 	static_assert(is_an_array_v<U>, "Passed type must either be an array reference `T (&)[N]` or `std::array<T,N>&` .");
 	return static_cast<int>(is_an_array<U>::size);	
 }
+template<typename Arr,
+	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
+	typename T = typename is_an_array<Bare>::value_type
+> constexpr T sum(const Arr& arr) noexcept {
+	static_assert(has_add_binary_op<T>::value, "Underlying type must have binary addition operator well defined.");
+	return std::accumulate( std::cbegin(arr), std::cend(arr), static_cast<T>(0) );
+}
+template<typename Arr> 
+constexpr auto avg(const Arr& arr) noexcept { return mnd::sum(arr) / mnd::len(arr); }
 
 /* Returns the name of the type passed, also adding 
  * ref-cv qualifiers. Demangles templated types, too :-) */
@@ -784,8 +853,8 @@ template<typename T,
 inline void sig_callback_handler(int signum) {
 	const char show[] = "\x1b[?25h";
 	const char nl   = '\n';
-	write(STDERR_FILENO, &nl, 1);
-	write(STDERR_FILENO, show, sizeof show - 1);
+	mnd::safe_write(STDERR_FILENO, &nl, 1);
+	mnd::safe_write(STDERR_FILENO, show, sizeof show - 1);
 	WARN_ASYNC("Caught abort/seg signal [%d].\n", signum);
 	_exit(128 + signum);
 }
@@ -1024,7 +1093,7 @@ public:
 
 				/* This calls case [5] ctor of TOnce<T> */
 				copy = std::make_unique<TOnce<T>> (this->GetName(),
-						/* T&& */ *static_cast<T*>( _internal.Clone(this->GetName()) ));
+					/* T&& */ *static_cast<T*>( _internal.Clone(this->GetName()) ));
 
 				if constexpr(mnd::has_set_directory<T>::value) /* Reassigning the unique_ptr must not double-free. */
 					copy->_internal.SetDirectory(nullptr);
@@ -1056,7 +1125,7 @@ public:
 				this->GetName(), rhs.GetName());
 
 		if(strcmp(this->GetName(), rhs.GetName()) != 0)
-			ERROR("Type: %s, wrapped type: %s. Trying to collect but objects are called differently. "
+			ERROR("Type: %s, wrapped type: %s. Trying to collect, but the objects are named differently? "
 					"[1]: %s ; [2]: %s", _SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
 					this->GetName(), rhs.GetName());
 
@@ -1082,7 +1151,7 @@ public:
 		}
 		/* This is tricky part. We should not issue a compile time error, since runtime collector can be provided.
 		 * But compiler cannot know this ahead of time. Therefore, in this case issue a runtime error (an std::abort). 
-		 * Now, for generic templates sometime an overload will match the template, but remain undefined, provocing 
+		 * Now, for generic templates, sometime an overload will match the template, but remain undefined, provocing 
 		 * an lderror. This is a TODO. Temporary fix: user-defined strictest overload as a no-op to shut up the compiler. 
 		 * IDK, maybe define and catch last-resort a generic symbol: 
 		 * template<typename T> void AddG_(T&, const T&) {} ? Then warn users that the code flow bounces here I guess. */
@@ -1090,7 +1159,7 @@ public:
 			ERROR("(%s) - Name: '\%s\' ; Underlying type \'%s\' doesn't define how to add or mean-up two instances, "
 					"and also its been constructed without a runtime callback. "
 					"Define a `void Add(T&, const T& )` function or pass a lambda as second argument "
-					"of \'RegisterObject(..)\' (or other ctor).", 
+					"of \'RegisterObject(..)\' (or another ctor).", 
 					_SELF_TYPE_CSTR, this->GetName(), mnd::type_name<T>().c_str());
 		}
 	}
@@ -1194,15 +1263,15 @@ public:
 	TContainer(std::string name) : TContainerBase(name) {}
 
 	/* Ok, some clarification. Lets say `struct Derived : TContainer<T>` is the derived class.
-	 * Then the next two methods below must get called in `Derived::Setup()`
-	 * We create the objects, pulling the read objects from disk, and receiving back a shared handle of the resource. 
+	 * Then the next two methods below must get called in `Derived::Setup()`.
+	 * We create the objects, pulling the read-only objects from disk, and receiving back a shared handle of the resource. 
 	 * This works fine for the original TContainer<T> instance.
 	 * But when cloning a TAnalysisProcess, it clones the underlying 'TProcessor<Out(Ins...)>' types. 
-	 * Instance behind *this* pointer, for the reader, is created via the copy ctor of the TContainer<T>,
+	 * Instance behind `this` pointer, for the reader, is created via the copy ctor of the TContainer<T>,
 	 * while the write instances are default constructed. The clone's ctor will also call this sequence initially, each pulling its own
-	 * copy of the read-objects from disk into RAM. Using unnecessary disk space, if simply all the clones own a 
+	 * copy of the read-objects from disk into RAM using unnecessary memory. Simple and nice would be if all the clones own a 
 	 * read-only shared pointer to a single instance of such objects.
-	 * - key difference is that then the Original singleton will simply switch the clones' variant to non-owning
+	 * - key difference is that then the 'original' TAnalysisProcess singleton will simply switch the clones' variant to non-owning
 	 * type, and the temporarily created (unique) objects of the clone will get deleted. 
 	 * This is important for read containers - as only one set of these `TOnce<T>` objects will get (de)serialized.
 	 * Clones and the original holds the shared pointers. 
@@ -1427,7 +1496,7 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 				_SELF_TYPE_CSTR, this->out.GetName(), lvc.size(), rvc.size());
 		
 		for(int i=0; i<(int)lvc.size(); ++i)
-			lvc[i]->Collect( *(rvc[i]) );
+			lvc[i]->Collect( *rvc[i] );
 	}
 
 }; // TProcessor 
@@ -1534,9 +1603,10 @@ struct PerThreadWriter {
 	}
 };
 
+inline std::unordered_set<std::string> g_loaded_containers {};
+
 } // namespace mnd
 
-inline std::unordered_set<std::string> g_loaded_containers {};
 
 /**
  * Represents the full analysis process, where an input entry 
@@ -1566,7 +1636,7 @@ struct alignas(mnd::CL) TAnalysisProcess final {
 
 private:
 	mnd::JobQueue q;
-	std::atomic<bool> _running {false}; /* Flagging this will join the thread back to the main. */
+	std::atomic<bool> _running {false}; /* Flagging it joins the thread back to the main. */
 	bool _do_write {true};
 	std::thread _thread;
 
@@ -1704,8 +1774,7 @@ public:
 	bool IsStopped() const noexcept { return ! _running && ! _thread.joinable(); }
 
 	/**
-	 * Returns the pointer to type 'TProcessor<Out(Ins..)>',
-	 * at the tuple index 'I'
+	 * Returns the pointer to type 'TProcessor<Out(Ins..)>', at the tuple index 'I'
 	 */
 	template<std::size_t I>
 	auto* GetProcess() noexcept {
@@ -1735,7 +1804,7 @@ public:
 		return rv;
 	}
 
-	Int_t GetEntry(Long64_t entry) const { 
+	Int_t GetEntry(Long64_t entry) const noexcept { 
 		if(mnd::IsEmpty(reader))
 			ERROR("Empty input TTree/RNTuple. Invalid");
 		else if(std::holds_alternative<mnd::RNPerThreadReader>(reader)) {
@@ -1749,7 +1818,7 @@ public:
 		}
 	}
 
-	u64 GetEntries() const { 
+	u64 GetEntries() const noexcept { 
 		if(mnd::IsEmpty(reader)) 
 			ERROR("Empty input TTree/RNTuple in GetEntries call. Invalid");
 		else if(std::holds_alternative<mnd::RNPerThreadReader>(reader)) {
@@ -1841,7 +1910,7 @@ public:
 	
 private:
 	
-	/* Each of the instances' writer is a slave to the initial one, who
+	/* Each of the instances' writer is a slave to the initial one, which
 	 * holds the true unique pointer handle. */
 	void SetupWriter() {
 		if(info.out.fname.empty() || info.out.out_rnname.empty())
@@ -1868,7 +1937,7 @@ private:
 			if(!pwriter_raw)
 				ERROR("RNTupleParallelWriter switched to original state, correct. But pointer is null after creation?");
 		}
-		else { /* ... Or it can be called from the clone. Initial `Clone()` call will set the raw pointer upfront. Here just check if valid. */
+		else { /* ... Or it can be called from the clone. Initial `Clone()` call will set the raw pointer upfront. Here just check validity. */
 			if( ! std::holds_alternative<RExp2::RNTupleParallelWriter*>(writer.pwriter) )
 				ERROR("RNTupleParallelWriter isn't the original, but clone not switched to raw pointer handle. (%s)", _SELF_TYPE_CSTR);
 			
@@ -1892,7 +1961,7 @@ private:
 		if(info.in.fname.empty())
 			ERROR("Info given, but input file name empty. (%s)", _SELF_TYPE_CSTR);
 
-		/* Reader object must be in empty state, */
+		/* Reader object must be in the empty state. */
 		if(! mnd::IsEmpty(reader)) 
 			ERROR("Trying to setup a fresh reader, but the object is already created with index: %zu. "
 				"1 => RNReader; 2 => TTreeReader. (%s)", reader.index(), _SELF_TYPE_CSTR);
@@ -1927,8 +1996,7 @@ private:
 			auto& r = std::get<mnd::RNPerThreadReader>(reader);
 			r._model = RExp::RNTupleModel::Create();
 			
-			/* For RNTupleModel' API, we use version 6.24.
-			 * Newer ROOT 6.26 API could be different? */
+			/* For RNTupleModel' API, we use version 6.24-28. */
 			mnd::for_each_in_tuple(this->_proc, [this, &r](auto& p /* TProcessor<Out(In...)>) */ )
 				{
 					mnd::for_each_in_tuple(p.in, [this, &r](auto& cont /* In : TContainer / TRawContainer */ )
@@ -2036,7 +2104,7 @@ private:
 				}
 			); // fold over subprocesses
 		
-			/* Warm-up. */
+			/* Cache warm-up. */
 			Long64_t _n_entries = std::min(10LL, r._tree->GetEntries());
 			for(Long64_t i=0; i<_n_entries; ++i) r._tree->GetEntry(i);
 
@@ -2052,8 +2120,8 @@ private:
 		if(f->IsZombie()) ERROR("Input file %s can be read, but is zombied. You sure path is correct? Or is it open somewhere else, or the disk is misbehaving?", fname);
 		if(!f->IsOpen())  ERROR("Input file %s can be read, but isn't opened. Is it used somewhere else?", fname);
 
-		if(g_loaded_containers.find(cont._name) == g_loaded_containers.end()) {
-			g_loaded_containers.insert(cont._name);
+		if(mnd::g_loaded_containers.find(cont._name) == mnd::g_loaded_containers.end()) {
+			mnd::g_loaded_containers.insert(cont._name);
 			for(auto& base : cont._vc)
 				base->Load( f.get() );
 		}
@@ -2063,7 +2131,7 @@ private:
 		 * These objects aren't really flagged as const, and users should abhold this 'contract' */
 
 		/* It does re-open a ROOT file, but this is done on order of ~10 times, which is insignificant overhead
-		 * in the setup. */
+		 * in the setup,.. maybe a fix for later? Probably will need a big overhaul to move to expression template-style TAnalysisProcess.. */
 	}
 
 	/* All other non-TContainer overloads default to a no-op. */
@@ -2123,7 +2191,7 @@ template <
 	}
 
 	/* On destructor sweep, write the single objects directly to the file. */
-	~TAnalysisPool() { Collect(); Write(); g_loaded_containers.clear(); }
+	~TAnalysisPool() { Collect(); Write(); mnd::g_loaded_containers.clear(); }
 
 	/**
 	 * Perform the dyadic fold of the Output containers, of each full process. 
@@ -2172,7 +2240,7 @@ template <
 		if(!f->IsWritable())
 			ERROR("Opened output file at end to write the single- wise objects, but is not writable? %s", info.out.fname.c_str());
 		
-		/* Fold the Write call over all subprocesses in pool[0] */
+		/* Fold the `Write()` call over all subprocesses in pool[0] */
 		mnd::for_each_in_tuple(process._proc, [&f](auto& subprocess)
 			{
 				/* subprocess: TProcessor<Out(Ins...)>& */
