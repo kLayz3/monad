@@ -635,6 +635,28 @@ struct has_add_binary_op<T, std::void_t<
 		T
 	>
 > {};
+template<typename T, typename = void>
+struct has_subt_binary_op : std::false_type {};
+template<typename T>
+struct has_subt_binary_op<T, std::void_t<
+	decltype( std::declval<T>() - std::declval<T>() )
+>> : std::bool_constant<
+	std::is_convertible_v<
+		decltype( std::declval<T>() - std::declval<T>() ),
+		T
+	>
+> {};
+template<typename T, typename = void>
+struct has_mult_binary_op : std::false_type {};
+template<typename T>
+struct has_mult_binary_op<T, std::void_t<
+	decltype( std::declval<T>() * std::declval<T>() )
+>> : std::bool_constant<
+	std::is_convertible_v<
+		decltype( std::declval<T>() * std::declval<T>() ),
+		T
+	>
+> {};
 
 template<typename T, typename = void>
 struct has_free_mean_fn : std::false_type {};
@@ -750,6 +772,7 @@ template<typename T,
 
 /* Following small algorithms should be expanded to general indexable range,
  * not just arrays. It's a TODO. */
+
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
 	std::size_t N = is_an_array<U>::size,
@@ -795,25 +818,110 @@ template<typename T,
 > constexpr int FindIndex(const T& arr, const typename is_an_array<U>::value_type& val) noexcept {
 	static_assert(is_an_array_v<U>, "Type T must be a C-style array or \'std::array<T,N>\'");
 	constexpr std::size_t N = is_an_array<U>::size;
-	for(int i=0; i < (int)N; ++i)
+	for(size_t i=0; i < N; ++i)
 		if(arr[i] == val) return i;
 	return -1;
 }
-template<typename T,
+template<typename T, // deduced from argument type.
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>
 > constexpr int len(const T& arr) noexcept {
 	static_assert(is_an_array_v<U>, "Passed type must either be an array reference `T (&)[N]` or `std::array<T,N>&` .");
+	(void)arr;
 	return static_cast<int>(is_an_array<U>::size);	
 }
-template<typename Arr,
+template<typename T,
+	typename U = std::remove_cv_t<std::remove_reference_t<T>>
+> constexpr int len() noexcept {
+	static_assert(is_an_array_v<U>, "Passed type must either be an array reference `T (&)[N]` or `std::array<T,N>&` .");
+	return static_cast<int>(is_an_array<U>::size);	
+}
+
+/* The functor must capture its (optionally) externally required state. 
+ * Its invocation simply gets folded over the entire static-sized container. */
+template <
+	typename Arr, 
+	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
+	typename T = typename is_an_array<Bare>::value_type,
+	typename Callable, 
+	std::size_t... Is
+> void _static_for_impl(Arr&& t, Callable&& f, std::index_sequence<Is...>) 
+	noexcept(std::is_nothrow_invocable<Callable, T>::value)
+{
+	(..., std::invoke(f, t[Is]));
+}
+template <
+	typename Arr, 
+	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
+	typename T = typename is_an_array<Bare>::value_type,
+	typename Callable 
+> void static_for(Arr&& t, Callable&& f) 
+	noexcept(std::is_nothrow_invocable<Callable, T>::value)
+{
+	constexpr std::size_t N = mnd::len<Bare>();
+	_static_for_impl(std::forward<Arr>(t), std::forward<Callable>(f), 
+		std::make_index_sequence<N>{});
+}
+
+using Unroll = BinaryOpt;
+template <
+	Unroll U = Unroll::No,
+	typename ResultType = void,
+	// .. all types below this line deduced :-)
+	typename Arr, 
+	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
+	typename T = typename is_an_array<Bare>::value_type,
+	typename R = std::conditional_t<std::is_void_v<ResultType>, T, ResultType>
+> constexpr R sum(const Arr& arr) noexcept {
+	static_assert(has_add_binary_op<T>::value, "Underlying type must have binary addition operator well defined.");
+	if constexpr(U == Unroll::No) {
+		return std::accumulate( std::cbegin(arr), std::cend(arr), static_cast<T>(0) );
+	} else {
+		R sum = static_cast<R>(0);
+		static_for(arr, [&sum](const T& val) { sum = std::move(sum) + static_cast<R>(val); });
+		return sum;
+	}
+}
+
+template <
+	Unroll U = Unroll::No,
+	typename ResultType = void,
+	typename Arr,
+	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
+	typename T = typename is_an_array<Bare>::value_type,
+	typename R = std::conditional_t<std::is_void_v<ResultType>, T, ResultType>
+> constexpr R mean(const Arr& arr) noexcept { 
+	return mnd::sum<U,R>(arr) / static_cast<R>(mnd::len<Arr>()); 
+}
+
+/* Calculate the (unbiased) sample variance. */
+template <
+	Unroll U = Unroll::No,
+	typename Arr,
 	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
 	typename T = typename is_an_array<Bare>::value_type
-> constexpr T sum(const Arr& arr) noexcept {
-	static_assert(has_add_binary_op<T>::value, "Underlying type must have binary addition operator well defined.");
-	return std::accumulate( std::cbegin(arr), std::cend(arr), static_cast<T>(0) );
+> constexpr double var(const Arr& arr) noexcept {
+	static_assert(std::is_convertible<T, double>::value, "Underlying type must be convertable to double.");
+
+	/* Non-optimized, Eigen maybe has a tiny bit better optimized variance estimated.
+	 * For numeric stability, we do two passes, finding the arithmetic value first.
+	 * In our cases, arrays are usually small - order of 4-20. Two passes don't hurt performance. */
+	constexpr size_t N = mnd::len<Arr>();	
+	const double mu = mnd::mean<U,double>(arr);
+	double result = 0.0;
+	if constexpr(U == Unroll::No) {
+		for(const T& item: arr) {
+			double d = static_cast<double>(item) - mu;
+			result += d*d;
+		}
+	} else {
+		static_for(arr, [mu, &result](const T& item) {
+			double d = static_cast<double>(item) - mu;
+			result += d*d;
+		});
+	}
+
+	return result / (N - 1);
 }
-template<typename Arr> 
-constexpr auto avg(const Arr& arr) noexcept { return mnd::sum(arr) / mnd::len(arr); }
 
 /* Returns the name of the type passed, also adding 
  * ref-cv qualifiers. Demangles templated types, too :-) */
