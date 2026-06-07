@@ -537,9 +537,9 @@ void for_each_in_tuple(Tuple&& t, Callable&& f) {
 template<typename T>
 struct is_an_array : std::false_type {};
 template<typename T, size_t N>
-struct is_an_array<T[N]> : std::true_type { using value_type = T; static constexpr size_t size = N; };
+struct is_an_array<T[N]> : std::true_type { using underlying_type = T; static constexpr size_t size = N; };
 template<typename T, size_t N>
-struct is_an_array<std::array<T,N>> : std::true_type { using value_type = T; static constexpr size_t size = N; };
+struct is_an_array<std::array<T,N>> : std::true_type { using underlying_type = T; static constexpr size_t size = N; };
 template<typename T>
 constexpr bool is_an_array_v = is_an_array<T>::value;
 
@@ -549,6 +549,33 @@ template<typename T, std::size_t N>
 struct ToStdArray<T[N]> { using type = std::array<typename ToStdArray<T>::type, N>; };
 template<typename T>
 using ToStdArray_t = typename ToStdArray<T>::type;
+
+template<typename T, typename = void>
+struct is_range : std::false_type {};
+template<typename T>
+struct is_range<T, std::void_t <
+	typename T::value_type,
+	decltype( std::begin(std::declval<T>()) ),
+	decltype( std::end(std::declval<T>()) )
+>> : std::true_type {
+	using underlying_type = typename T::value_type;
+};
+
+template<typename, typename = void>
+struct is_indexable_range : std::false_type {};
+template<typename T>
+struct is_indexable_range <
+	T,
+	std::void_t <
+		typename T::value_type,
+		decltype(std::begin(std::declval<T&>())),
+		decltype(std::end(std::declval<T&>())),
+		decltype(std::declval<T&>().size()),
+		decltype(std::declval<T&>()[std::declval<std::size_t>()])
+	>
+> : std::true_type { 
+	using underlying_type = typename T::value_type;
+};
 
 template<typename T, typename = void>
 struct has_clean_noexcept : std::false_type {};
@@ -770,8 +797,9 @@ template<typename T,
 		return std::filesystem::path(std::forward<T>(arg)).string();
 }
 
-/* Following small algorithms should be expanded to general indexable range,
- * not just arrays. It's a TODO. */
+/* Small algorithms...
+ * Some of them exploit the constexpr size of arrays that normally (I don't understand why)
+ * GCC refuses to unroll . */
 
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
@@ -815,7 +843,7 @@ constexpr auto max(T t, Ts... ts) noexcept {
 }
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>
-> constexpr int FindIndex(const T& arr, const typename is_an_array<U>::value_type& val) noexcept {
+> constexpr int FindIndex(const T& arr, const typename is_an_array<U>::underlying_type& val) noexcept {
 	static_assert(is_an_array_v<U>, "Type T must be a C-style array or \'std::array<T,N>\'");
 	constexpr std::size_t N = is_an_array<U>::size;
 	for(size_t i=0; i < N; ++i)
@@ -841,7 +869,7 @@ template<typename T,
 template <
 	typename Arr, 
 	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
-	typename T = typename is_an_array<Bare>::value_type,
+	typename T = typename is_an_array<Bare>::underlying_type,
 	typename Callable, 
 	std::size_t... Is
 > void _static_for_impl(Arr&& t, Callable&& f, std::index_sequence<Is...>) 
@@ -852,7 +880,7 @@ template <
 template <
 	typename Arr, 
 	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
-	typename T = typename is_an_array<Bare>::value_type,
+	typename T = typename is_an_array<Bare>::underlying_type,
 	typename Callable 
 > void static_for(Arr&& t, Callable&& f) 
 	noexcept(std::is_nothrow_invocable<Callable, T>::value)
@@ -865,11 +893,11 @@ template <
 using Unroll = BinaryOpt;
 template <
 	Unroll U = Unroll::No,
-	typename ResultType = void,
+	typename ResultType = void, // If left unspecified, sums into the underlying type of the array. */
 	// .. all types below this line deduced :-)
 	typename Arr, 
 	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
-	typename T = typename is_an_array<Bare>::value_type,
+	typename T = typename is_an_array<Bare>::underlying_type,
 	typename R = std::conditional_t<std::is_void_v<ResultType>, T, ResultType>
 > constexpr R sum(const Arr& arr) noexcept {
 	static_assert(has_add_binary_op<T>::value, "Underlying type must have binary addition operator well defined.");
@@ -884,22 +912,43 @@ template <
 
 template <
 	Unroll U = Unroll::No,
-	typename ResultType = void,
-	typename Arr,
-	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
-	typename T = typename is_an_array<Bare>::value_type,
-	typename R = std::conditional_t<std::is_void_v<ResultType>, T, ResultType>
-> constexpr R mean(const Arr& arr) noexcept { 
-	return mnd::sum<U,R>(arr) / static_cast<R>(mnd::len<Arr>()); 
+	typename ResultType = void, /* Check API above. */
+	typename Arr
+> constexpr auto mean(const Arr& arr) noexcept -> decltype( mnd::sum<U,ResultType>(std::declval<const Arr&>()) ) 
+{ 
+	return mnd::sum<U, ResultType>(arr) / static_cast<ResultType>(mnd::len<Arr>()); 
 }
+
+/* Small container to encapsulate both mean and sample variance. */
+struct MeanVar {
+	double mean, var;
+	inline operator std::pair<double,double>() noexcept { return { mean, var }; }
+	inline operator std::array<double,2>() noexcept { return { mean, var }; }
+
+	friend std::ostream& operator<<(std::ostream& os, const MeanVar& rhs) noexcept {
+		return os << rhs.mean << " ± " << std::sqrt( rhs.var );
+	}
+
+	inline std::string string() const noexcept { 
+		std::stringstream ss;
+		ss << *this;
+		return ss.str();
+	}
+
+	inline std::string lstring() const noexcept {
+		std::stringstream ss;
+		ss << mean << " #pm " << std::sqrt(var);
+		return ss.str();
+	}
+};
 
 /* Calculate the (unbiased) sample variance. */
 template <
 	Unroll U = Unroll::No,
 	typename Arr,
 	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
-	typename T = typename is_an_array<Bare>::value_type
-> constexpr double var(const Arr& arr) noexcept {
+	typename T = typename is_an_array<Bare>::underlying_type
+> constexpr MeanVar mean_var(const Arr& arr) noexcept {
 	static_assert(std::is_convertible<T, double>::value, "Underlying type must be convertable to double.");
 
 	/* Non-optimized, Eigen maybe has a tiny bit better optimized variance estimated.
@@ -919,8 +968,39 @@ template <
 			result += d*d;
 		});
 	}
+	return {mu, result / (N - 1)};
+}
 
-	return result / (N - 1);
+/* SFINAE'd away for arrays. Previous overload wins. */
+template <
+	typename Range,
+	typename Bare = std::remove_cv_t<std::remove_reference_t<Range>>,
+	typename = typename std::enable_if_t<!is_an_array<Bare>::value>
+> MeanVar mean_var(const Range& r) {
+	static_assert(mnd::is_range<Range>::value, 
+		"Type `Range` must be an MONAD-compatible range.");
+	using T = typename mnd::is_range<Range>::underlying_type;
+	static_assert(std::is_convertible_v<T, double>,
+		"Underlying type must be convertible to double.");
+
+	auto first = std::cbegin(r);
+	auto last = std::cend(r);
+	const auto n = std::distance(first, last);
+	if(n <= 0) return { NAN, NAN };
+
+	double sum = 0.0;
+	for(auto it = first; it != last; ++it) {
+		sum += static_cast<double>(*it);
+	}
+	double mean = sum / static_cast<double>(n);
+
+	double sq_sum = 0.0;
+	for(auto it = first; it != last; ++it) {
+		double d = static_cast<double>(*it) - mean;
+		sq_sum += d * d;
+	}
+	double variance = sq_sum / static_cast<double>(n-1);
+	return {mean, variance};
 }
 
 /* Returns the name of the type passed, also adding 
