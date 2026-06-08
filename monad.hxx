@@ -317,7 +317,7 @@ MND_RUSTIFY_TYPE(32)
 MND_RUSTIFY_TYPE(64)
 
 template<typename T, std::size_t N>
-void Add(std::array<T, N>& lhs, const std::array<T, N>& rhs);
+void Add(std::array<T,N>& lhs, const std::array<T,N>& rhs);
 template<typename T>
 void Add(std::vector<T>& lhs, const std::vector<T>& rhs);
 
@@ -533,6 +533,9 @@ void for_each_in_tuple(Tuple&& t, Callable&& f) {
 	_for_each_in_tuple_impl(std::forward<Tuple>(t), std::forward<Callable>(f), 
 		std::make_index_sequence<N>{});
 }
+
+template<typename> 
+inline constexpr bool always_false_v = false;
 
 template<typename T>
 struct is_an_array : std::false_type {};
@@ -1375,20 +1378,57 @@ namespace mnd {
  * This also recurses nicely into std::array< std::array<... >>, as long as the 
  * underlying type at the base implements the Add function.
  * Further specializations will over-specialize and this generic overload won't get selected. */
-template<typename T, std::size_t N,
-	typename std::enable_if<mnd::has_dyadic_add_ref<T>::value>::type* = nullptr
-> void Add(std::array<T, N>& lhs, const std::array<T, N>& rhs) {
+template<typename T, std::size_t N> 
+void Add(std::array<T, N>& lhs, const std::array<T, N>& rhs) {
 	for(std::size_t i = 0; i < N; ++i) {
-		Add(lhs[i], rhs[i]); 
+		if constexpr(mnd::has_free_add_fn<T>::value) {
+			Add(lhs[i], rhs[i]);
+		}
+		else if constexpr(mnd::has_free_mean_fn<T>::value) {
+			Mean(lhs[i], rhs[i]);
+		}
+		else if constexpr(mnd::has_dyadic_add_ref<T>::value) {
+			lhs[i].Add(rhs[i]);
+		}
+		else if constexpr(mnd::has_dyadic_add_ptr<T>::value) {
+			lhs[i].Add(&rhs[i]);
+		}
+		else if constexpr(mnd::has_add_div_unary_op<T>::value) {
+			lhs[i] += rhs[i];
+			lhs[i] /= 2;
+		}
+		else {
+			static_assert(mnd::always_false_v<T>, "Underlying type `T` isn't addable by MONAD policy.");
+		}
 	}
 }
-template<typename T,
-	typename std::enable_if<mnd::has_dyadic_add_ref<T>::value>::type* = nullptr
-> void Add(std::vector<T>& lhs, const std::vector<T>& rhs) {
-	if(lhs.size() != rhs.size())
+template<typename T> 
+void Add(std::vector<T>& lhs, const std::vector<T>& rhs) {
+	const std::size_t N = lhs.size();
+	if(N != rhs.size())
 		ERROR("Vectors non-equal sized. Sizes: lhs=%zu, rhs=%zu. Cannot safely collect them together.",
-			lhs.size(), rhs.size());
-	for(std::size_t i = 0; i < lhs.size(); ++i) { Add(lhs[i], rhs[i]); }
+			N, rhs.size());
+	for(std::size_t i = 0; i < N; ++i) {
+		if constexpr(mnd::has_free_add_fn<T>::value) {
+			Add(lhs[i], rhs[i]);
+		}
+		else if constexpr(mnd::has_free_mean_fn<T>::value) {
+			Mean(lhs[i], rhs[i]);
+		}
+		else if constexpr(mnd::has_dyadic_add_ref<T>::value) {
+			lhs[i].Add(rhs[i]);
+		}
+		else if constexpr(mnd::has_dyadic_add_ptr<T>::value) {
+			lhs[i].Add(&rhs[i]);
+		}
+		else if constexpr(mnd::has_add_div_unary_op<T>::value) {
+			lhs[i] += rhs[i];
+			lhs[i] /= 2;
+		}
+		else {
+			static_assert(mnd::always_false_v<T>, "Underlying type `T` isn't addable by MONAD policy.");
+		}
+	}
 }
 
 #if !defined(MND_POLLUTE_G_NAMESPACE)

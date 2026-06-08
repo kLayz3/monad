@@ -8,6 +8,7 @@ CXXFLAGS += -DPOOL_MAX_THREADS_=$(shell nproc) \
 ifneq ($(OPTIMIZATION), 1)
 
 CXXFLAGS += -ggdb -g -O0 -fno-omit-frame-pointer -fno-inline \
+	-fsanitize=alignment
 	-DBOOST_STACKTRACE_USE_ADDR2LINE \
 	-lboost_stacktrace_addr2line -ldl \
 	-DMND_DEBUG_ENABLED
