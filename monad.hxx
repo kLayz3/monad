@@ -800,10 +800,6 @@ template<typename T,
 		return std::filesystem::path(std::forward<T>(arg)).string();
 }
 
-/* Small algorithms...
- * Some of them exploit the constexpr size of arrays that normally (I don't understand why)
- * GCC refuses to unroll . */
-
 template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
 	std::size_t N = is_an_array<U>::size,
@@ -853,7 +849,7 @@ template<typename T,
 		if(arr[i] == val) return i;
 	return -1;
 }
-template<typename T, // deduced from argument type.
+template<typename T,
 	typename U = std::remove_cv_t<std::remove_reference_t<T>>
 > constexpr int len(const T& arr) noexcept {
 	static_assert(is_an_array_v<U>, "Passed type must either be an array reference `T (&)[N]` or `std::array<T,N>&` .");
@@ -867,40 +863,96 @@ template<typename T,
 	return static_cast<int>(is_an_array<U>::size);	
 }
 
-/* The functor must capture its (optionally) externally required state. 
- * Its invocation simply gets folded over the entire static-sized container. */
-template <
-	typename Arr, 
-	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
-	typename T = typename is_an_array<Bare>::underlying_type,
+/* Next few routines serve to violently unroll loops.
+ * Namely, GCC sometimes even in -03 refuses to unroll small loops (I don't understand why).
+ * The pragma unroll only works if the loop size is known at preproc time. 
+ * ... Also unrolling over a static-sized container. :-) */
+template<std::size_t Offset, typename Sequence>
+struct offset_sequence;
+
+template<std::size_t Offset, std::size_t... Is>
+struct offset_sequence<Offset, std::index_sequence<Is...>> {
+	using type = std::index_sequence<(Offset + Is)...>; 
+	// a sequence: Offset, Offset+1, ..., Offset-1 + sizeof...(Is)
+};
+
+template<std::size_t Begin, std::size_t End>
+using make_index_range =
+	typename offset_sequence <
+		Begin,
+		std::make_index_sequence<End - Begin>
+	>::type; /* == std::index_sequence<Begin, Begin+1, ..., End-1> */
+
+template < 
 	typename Callable, 
 	std::size_t... Is
-> void _static_for_impl(Arr&& t, Callable&& f, std::index_sequence<Is...>) 
-	noexcept(std::is_nothrow_invocable<Callable, T>::value)
+> void _static_for_impl(Callable&& f, std::index_sequence<Is...>) 
+	noexcept((std::is_nothrow_invocable <
+		Callable&, std::integral_constant<std::size_t, Is>
+	>::value && ...))
 {
-	(..., std::invoke(f, t[Is]));
+	(..., std::invoke(f, std::integral_constant<std::size_t, Is>{}));
 }
 template <
-	typename Arr, 
-	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
-	typename T = typename is_an_array<Bare>::underlying_type,
+	std::size_t Begin,
+	std::size_t End,
 	typename Callable 
-> void static_for(Arr&& t, Callable&& f) 
-	noexcept(std::is_nothrow_invocable<Callable, T>::value)
+> void static_for(Callable&& f) 
+	noexcept( noexcept(_static_for_impl(
+		std::forward<Callable>(f), 
+		mnd::make_index_range<Begin, End>{}
+	)))
 {
+	static_assert(End >= Begin, "mnd::static_for requires End >= Begin");
+	_static_for_impl(std::forward<Callable>(f), make_index_range<Begin, End>{});
+}
+/* Example: 
+ * static_for<2,6>([](auto I) {
+     constexpr std::size_t i = decltype(I)::value;
+     printf("%zu^2, ", i*i);
+ * }); 
+ * // 4, 9, 16, 25, 
+ */
+
+/* Functor invocation simply gets folded over the entire static-sized container. */
+template <
+	typename Arr, 
+	typename Callable, 
+	std::size_t... Is
+> void _static_for_each_impl(Arr&& arr, Callable&& f, std::index_sequence<Is...>) 
+	noexcept((noexcept(std::invoke(
+		std::declval<Callable&>(),
+		std::declval<Arr>()[Is]
+	)) && ...))
+{
+	(..., std::invoke(f, std::forward<Arr>(arr)[Is]));
+}
+
+template <
+	typename Arr, 
+	typename Callable 
+> void static_for_each(Arr&& arr, Callable&& f) 
+	noexcept( noexcept(_static_for_impl(
+		std::forward<Arr>(arr),
+		std::forward<Callable>(f),
+		std::make_index_sequence <
+			mnd::len<std::remove_cv_t<std::remove_reference_t<Arr>>>() 
+		>{}
+	)))
+{
+	using Bare = std::remove_cv_t<std::remove_reference_t<Arr>>;
 	constexpr std::size_t N = mnd::len<Bare>();
-	_static_for_impl(std::forward<Arr>(t), std::forward<Callable>(f), 
+	_static_for_each_impl(std::forward<Arr>(arr), std::forward<Callable>(f), 
 		std::make_index_sequence<N>{});
 }
 
 using Unroll = BinaryOpt;
 template <
 	Unroll U = Unroll::No,
-	typename ResultType = void, // If left unspecified, sums into the underlying type of the array. */
+	typename ResultType = void, // If left unspecified, result type is the underlying type of the array. */
 	// .. all types below this line deduced :-)
 	typename Arr, 
-	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
-	typename T = typename is_an_array<Bare>::underlying_type,
+	typename T = typename is_an_array<std::remove_cv_t<std::remove_reference_t<Arr>>>::underlying_type,
 	typename R = std::conditional_t<std::is_void_v<ResultType>, T, ResultType>
 > constexpr R sum(const Arr& arr) noexcept {
 	static_assert(has_add_binary_op<T>::value, "Underlying type must have binary addition operator well defined.");
@@ -908,7 +960,7 @@ template <
 		return std::accumulate( std::cbegin(arr), std::cend(arr), static_cast<T>(0) );
 	} else {
 		R sum = static_cast<R>(0);
-		static_for(arr, [&sum](const T& val) { sum = std::move(sum) + static_cast<R>(val); });
+		static_for_each(arr, [&sum](const T& val) { sum = std::move(sum) + static_cast<R>(val); });
 		return sum;
 	}
 }
@@ -918,7 +970,7 @@ template <
 	typename ResultType = void, /* Check API above. */
 	typename Arr
 > constexpr auto mean(const Arr& arr) noexcept -> decltype( mnd::sum<U,ResultType>(std::declval<const Arr&>()) ) 
-{ 
+{
 	return mnd::sum<U, ResultType>(arr) / static_cast<ResultType>(mnd::len<Arr>()); 
 }
 
@@ -949,8 +1001,7 @@ struct MeanVar {
 template <
 	Unroll U = Unroll::No,
 	typename Arr,
-	typename Bare = std::remove_cv_t<std::remove_reference_t<Arr>>,
-	typename T = typename is_an_array<Bare>::underlying_type
+	typename T = typename is_an_array<std::remove_cv_t<std::remove_reference_t<Arr>>>::underlying_type
 > constexpr MeanVar mean_var(const Arr& arr) noexcept {
 	static_assert(std::is_convertible<T, double>::value, "Underlying type must be convertable to double.");
 
@@ -966,7 +1017,7 @@ template <
 			result += d*d;
 		}
 	} else {
-		static_for(arr, [mu, &result](const T& item) {
+		static_for_each(arr, [mu, &result](const T& item) {
 			double d = static_cast<double>(item) - mu;
 			result += d*d;
 		});
