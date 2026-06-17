@@ -906,13 +906,14 @@ template <
 	static_assert(End >= Begin, "mnd::static_for requires End >= Begin");
 	_static_for_impl(std::forward<Callable>(f), make_index_range<Begin, End>{});
 }
-/* Example: 
- * static_for<2,6>([](auto I) {
-     constexpr std::size_t i = decltype(I)::value;
-     printf("%zu^2, ", i*i);
- * }); 
- * // 4, 9, 16, 25, 
- */
+
+/* Example:                                          .LCO: .string "%zu, "
+ * static_for<2,6>([](auto I) {                      sub     rsp, 8
+     constexpr std::size_t i = decltype(I)::value;   mov     esi, 4
+     printf("%zu^2, ", i*i);                         mov     edi, OFFSET FLAT:.LCO
+ * });                                               xor     eax, eax
+ * // 4, 9, 16, 25,                                  call    printf
+ *                                                   mov     esi, 9 ... */
 
 /* Functor invocation simply gets folded over the entire static-sized container. */
 template <
@@ -977,8 +978,8 @@ template <
 /* Small container to encapsulate both mean and sample variance. */
 struct MeanVar {
 	double mean, var;
-	inline operator std::pair<double,double>() noexcept { return { mean, var }; }
-	inline operator std::array<double,2>() noexcept { return { mean, var }; }
+	inline operator std::pair<double,double>() const noexcept { return { mean, var }; }
+	inline operator std::array<double,2>() const noexcept { return { mean, var }; }
 
 	friend std::ostream& operator<<(std::ostream& os, const MeanVar& rhs) noexcept {
 		return os << rhs.mean << " ± " << std::sqrt( rhs.var );
