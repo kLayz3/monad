@@ -407,6 +407,16 @@ bool IsValid(const std::array<T,N>& bounds) {
 	return std::isfinite(bounds[N-2]) and std::isfinite(bounds[N-1]);
 }
 
+template<typename... Ts>
+bool isfinite(Ts&&... ts) { /* All must pass the predicate. */
+	static_assert(
+		(std::is_arithmetic_v<
+			std::remove_reference_t<Ts>
+		> && ...), 
+		"Types passed must be arithmetic, basic types.");
+	return (std::isfinite(ts) && ...);
+}
+
 struct TimePoint {
 	std::chrono::high_resolution_clock::time_point t;
 	std::string tag;
@@ -933,7 +943,7 @@ template <
 	typename Arr, 
 	typename Callable 
 > void static_for_each(Arr&& arr, Callable&& f) 
-	noexcept( noexcept(_static_for_impl(
+	noexcept( noexcept(_static_for_each_impl(
 		std::forward<Arr>(arr),
 		std::forward<Callable>(f),
 		std::make_index_sequence <
@@ -956,7 +966,7 @@ template <
 	typename T = typename is_an_array<std::remove_cv_t<std::remove_reference_t<Arr>>>::underlying_type,
 	typename R = std::conditional_t<std::is_void_v<ResultType>, T, ResultType>
 > constexpr R sum(const Arr& arr) noexcept {
-	static_assert(has_add_binary_op<T>::value, "Underlying type must have binary addition operator well defined.");
+	static_assert(has_add_binary_op<R>::value, "Underlying type must have binary addition operator well defined.");
 	if constexpr(U == Unroll::No) {
 		return std::accumulate( std::cbegin(arr), std::cend(arr), static_cast<T>(0) );
 	} else {
@@ -1056,6 +1066,17 @@ template <
 	}
 	double variance = sq_sum / static_cast<double>(n-1);
 	return {mean, variance};
+}
+
+/* Make a constexpr array constructor, filled with a default value, other than `{}` */
+template<typename T, std::size_t... I>
+constexpr std::array<T, sizeof...(I)>
+_make_filled_array_impl(T value, std::index_sequence<I...>) {
+	return { ((void)I, value)... };
+}
+template<typename T, std::size_t N>
+constexpr std::array<T, N> make_filled_array(T value) {
+	return _make_filled_array_impl<T>(value, std::make_index_sequence<N>{});
 }
 
 /* Returns the name of the type passed, also adding 
@@ -1395,7 +1416,7 @@ public:
 		/* This is tricky part. We should not issue a compile time error, since runtime collector can be provided.
 		 * But compiler cannot know this ahead of time. Therefore, in this case issue a runtime error (an std::abort). 
 		 * Now, for generic templates, sometime an overload will match the template, but remain undefined, provocing 
-		 * an lderror. This is a TODO. Temporary fix: user-defined strictest overload as a no-op to shut up the compiler. 
+		 * an lderror. This is a TODO. Temporary fix: user-defined strictest overload as a no-op to shut up the linker. 
 		 * IDK, maybe define and catch last-resort a generic symbol: 
 		 * template<typename T> void AddG_(T&, const T&) {} ? Then warn users that the code flow bounces here I guess. */
 		else { 
