@@ -392,15 +392,6 @@ bool IsInside(const T& value, const std::array<U,N>& bounds) {
 	return bounds[N-2] <= value and value < bounds[N-1];
 }
 
-/* Geometric predicate. */
-template <
-	typename T = double,
-	typename Value = std::array<T,2>,
-	typename Bound = std::array<Value,2>
-> bool IsInside(const Value value, const Bound& bounds) {
-	return mnd::IsInside(value[0], bounds[0]) and mnd::IsInside(value[1], bounds[1]); 
-}
-
 template<typename T, std::size_t N>
 bool IsValid(const std::array<T,N>& bounds) {
 	static_assert(N >= 2, "Array size must be >= 2");
