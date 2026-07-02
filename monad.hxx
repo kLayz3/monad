@@ -273,6 +273,13 @@ inline void safe_write(int fd, const char* s, size_t n) noexcept {
 	} while (0)
 #endif
 
+#define MND_THROW(...) do { \
+	std::string what {}; \
+	what += mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILENAME__, __LINE__); \
+	what += mnd::msg(__VA_ARGS__); \
+	throw std::runtime_error(what); \
+} while(0)
+
 #ifdef MND_DEBUG_ENABLED
 #	define MND_ASSERT(expr) \
 		do { \
@@ -911,7 +918,7 @@ template <
 /* Example:                                          .LCO: .string "%zu, "
  * static_for<2,6>([](auto I) {                      sub     rsp, 8
      constexpr std::size_t i = decltype(I)::value;   mov     esi, 4
-     printf("%zu^2, ", i*i);                         mov     edi, OFFSET FLAT:.LCO
+     printf("%zu, ", i*i);                           mov     edi, OFFSET FLAT:.LCO
  * });                                               xor     eax, eax
  * // 4, 9, 16, 25,                                  call    printf
  *                                                   mov     esi, 9 ... */

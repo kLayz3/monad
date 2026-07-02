@@ -24,5 +24,4 @@ CXXFLAGS += -O3 -march=native
 
 endif
 
-MONAD_DIR=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-
+MONAD_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
