@@ -476,21 +476,13 @@ void PrintElapsed(std::vector<TimePoint>&& v) {
 	PrintElapsed<E>(v.back(), v.front());
 }
 
-inline void __concat_impl__(std::ostringstream& ) {}
-
-template<typename T, typename... Args>
-void __concat_impl__(std::ostringstream& oss, T&& first, Args&&... args) {
-	oss << std::forward<T>(first);
-	__concat_impl__(oss, std::forward<Args>(args)... );
-}
-
 /**
  * Concatenates bunch of string arguments which can be lvalues, statics, etc. and returns an owned std::string. 
  */
 template<typename... Args>
 std::string sstrcat(Args&&... args) {
-	std::ostringstream oss;
-	__concat_impl__(oss, std::forward<Args>(args)... );
+	std::ostringstream oss{};
+	(oss << ... << std::forward<Args>(args));
 	return oss.str();
 }
 
@@ -768,7 +760,7 @@ constexpr bool is_pathlike_arg_v =
 template<typename T,
 	typename U = std::decay_t<T>,
 	typename std::enable_if<is_pathlike_arg_v<T>>::type* = nullptr
-> std::optional<std::ifstream> get_maybe_ifstream(T&& arg) {
+> Maybe<std::ifstream> get_maybe_ifstream(T&& arg) {
 	if constexpr(std::is_base_of_v<std::istream, U>) {
 		if(arg.is_open()) return arg;
 		else return {};
@@ -798,7 +790,7 @@ bool is_file_readable(T&& arg) {
 
 template<typename T,
 	typename U = std::decay_t<T>
-> std::optional<std::string> get_file_path(T&& arg) {
+> Maybe<std::string> get_file_path(T&& arg) {
 	static_assert(is_pathlike_arg_v<U>, "Type <T> must be path-like");
 	if constexpr(std::is_base_of_v<std::istream, U>) 
 		return {};
