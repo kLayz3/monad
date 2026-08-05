@@ -225,7 +225,7 @@ inline void safe_write(int fd, const char* s, size_t n) noexcept {
 	ssize_t r = ::write(fd, s, n);
 	(void)r; // ignored; to shutup GCC's ‘warn_unused_result’ [-Wunused-result]
 }
-}
+} // namespace mnd
 
 #define YELL(...) \
 	do { \
@@ -332,14 +332,89 @@ void Add(std::vector<T>& lhs, const std::vector<T>& rhs);
 }
 #endif
 
+#if __cplusplus >= 202000L 
+#	include <span>
+	namespace mnd {
+		template<typename T>
+		using span = std::span<T>;
+	}
+#elif __has_include("boost/beast/core/span.hpp")
+#	include "boost/beast/core/span.hpp"
+	namespace mnd {
+		    template<typename T>
+			using span = boost::beast::span<T>;
+	}
+#else
+#	error "Neither C++20 given, nor boost span library for found. Cannot proceed."
+#endif
+
 namespace mnd {
 
+/* Helper fnc's to convert a contiguous containers to a span.
+ * Problem is that BOOST 1.73 has explicit ctor from ContContainer,
+ * and it is relaxed in later BOOST versions. */
+template<typename T>
+span<const T> as_span(const std::vector<T>& v) noexcept {
+	return span<const T>{v.data(), v.size()};
+}
+
+template<typename T, std::size_t N>
+span<const T> as_span(const std::array<T, N>& a) noexcept {
+	return span<const T>{a.data(), a.size()};
+}
+
 #if defined(__HAS_INDICATORS)
-inline void 
-PrintProgress(indicators::ProgressBar& bar, const u64 n_entry, const u64 max_entries, const u64 step = 250) noexcept {
+inline void PrintProgress (
+	indicators::ProgressBar& bar, 
+	const u64 n_entry, 
+	const u64 max_entries, 
+	const u64 step = 250,
+	span<std::string_view const> dynamic_frames = {},
+	double dynamic_update_freq = 0.5 /* seconds */ 
+) {
+	using namespace indicators;
+	using clock = std::chrono::steady_clock;
+	using ms = std::chrono::milliseconds;
+	
 	static u64 n_entry_called = 0;
-	if(n_entry - n_entry_called < step) return;
-	bar.set_progress( (n_entry*100) / max_entries );
+	static u64               current_dynamic_frame_i = 0; 
+	static std::string_view  current_dynamic_frame_v = "";
+	static clock::time_point current_dynamic_frame_t = {};
+
+	if(n_entry >= n_entry_called and 
+	   n_entry - n_entry_called < step) return;
+
+	const auto now = clock::now();
+
+	if(!dynamic_frames.empty() and 
+		std::chrono::duration_cast<ms>(now - current_dynamic_frame_t).count() 
+			> 1000*dynamic_update_freq ) 
+	{
+		const size_t nframes = dynamic_frames.size();
+		std::string postfix = bar.get_postfix_text_only();
+		if( !current_dynamic_frame_v.empty() and 
+			postfix.size() >= current_dynamic_frame_v.size() and
+			postfix.compare (
+				postfix.size() - current_dynamic_frame_v.size(),
+				current_dynamic_frame_v.size(),
+				current_dynamic_frame_v.data(),
+				current_dynamic_frame_v.size()
+			) == 0
+		) { // Remove the previous frame only if it is actually the suffix (of the postfix).
+			postfix.resize (
+				postfix.size() - current_dynamic_frame_v.size()
+            ); 
+		}
+		current_dynamic_frame_i++;
+		current_dynamic_frame_t = now;
+		current_dynamic_frame_v = dynamic_frames.data()[ current_dynamic_frame_i % nframes ];
+
+		postfix += current_dynamic_frame_v;
+		bar.set_option(option::PostfixText{std::move(postfix)});
+	}
+
+	// No check for max_entries == 0. Sanity checks must be upfront.
+	bar.set_progress(std::min<u64>( (n_entry*100) / max_entries, 100 )) ;
 
 	n_entry_called = n_entry;
 }
@@ -952,7 +1027,7 @@ template <
 	Unroll U = Unroll::No,
 	typename ResultType = void, // If left unspecified, result type is the underlying type of the array. */
 	// .. all types below this line deduced :-)
-	typename Arr, 
+	typename Arr,
 	typename T = typename is_an_array<std::remove_cv_t<std::remove_reference_t<Arr>>>::underlying_type,
 	typename R = std::conditional_t<std::is_void_v<ResultType>, T, ResultType>
 > constexpr R sum(const Arr& arr) noexcept {

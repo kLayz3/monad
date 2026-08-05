@@ -2098,6 +2098,15 @@ public:
     get_value<details::ProgressBarOption::completed>() = true;
     print_progress();
   }
+  
+  /* Patch k14y23 29/07/26 */
+  template <details::ProgressBarOption id>
+  decltype(auto) get_option() const {
+    return get_value<id>();
+  }
+  std::string const& get_postfix_text_only() const {
+    return get_value<details::ProgressBarOption::postfix_text>();
+  }
 
 private:
   template <details::ProgressBarOption id>
