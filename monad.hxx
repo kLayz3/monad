@@ -1044,10 +1044,11 @@ template <
 template <
 	Unroll U = Unroll::No,
 	typename ResultType = void, /* Check API above. */
-	typename Arr
-> constexpr auto mean(const Arr& arr) noexcept -> decltype( mnd::sum<U,ResultType>(std::declval<const Arr&>()) ) 
-{
-	return mnd::sum<U, ResultType>(arr) / static_cast<ResultType>(mnd::len<Arr>()); 
+	// .. all types below this line deduced :-)
+	typename Arr,
+	typename R = decltype( mnd::sum<U,ResultType>(std::declval<const Arr&>()) )
+> constexpr R mean(const Arr& arr) noexcept {
+	return mnd::sum<U, ResultType>(arr) / static_cast<R>(mnd::len<Arr>());
 }
 
 /* Small container to encapsulate both mean and sample variance. */
