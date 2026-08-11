@@ -332,6 +332,11 @@ void Add(std::vector<T>& lhs, const std::vector<T>& rhs);
 }
 #endif
 
+/* Sometime useful libraries don't want to carry the entire MONAD dependency,
+ * but require a stable `span` API. Therefore make it permissible to be yoinkable,
+ * under the appropriate define guard. */
+#if !defined(MND_INCLUDE_SPAN_IS_DEFINED)
+#define MND_INCLUDE_SPAN_IS_DEFINED
 #if __cplusplus >= 202000L 
 #	include <span>
 	namespace mnd {
@@ -347,6 +352,7 @@ void Add(std::vector<T>& lhs, const std::vector<T>& rhs);
 #else
 #	error "Neither C++20 given, nor boost span library for found. Cannot proceed."
 #endif
+#endif // MND_INCLUDE_SPAN_IS_DEFINED
 
 namespace mnd {
 
@@ -417,6 +423,14 @@ inline void PrintProgress (
 	bar.set_progress(std::min<u64>( (n_entry*100) / max_entries, 100 )) ;
 
 	n_entry_called = n_entry;
+}
+namespace _dyn {
+inline constexpr auto dancer = std::array { 
+	std::string_view{" ┏(-_-)┛"}, 
+	std::string_view{" ┗(-_-)┓"},
+	std::string_view{" ┗(^_^)┛"},
+	std::string_view{" ┏(^_^)┓"} 
+};
 }
 #endif
 
@@ -2695,7 +2709,7 @@ template <
 #endif
 			}
 #ifdef __HAS_INDICATORS
-			mnd::PrintProgress(bar, j.last, nentries, NSlice-1);
+			mnd::PrintProgress(bar, j.last, nentries, NSlice-1, mnd::_dyn::dancer, 0.5);
 #endif
 		}
 
@@ -2845,7 +2859,7 @@ struct TAnalysisPool<1, Processors...> final {
 			process.GetEntry( static_cast<Long64_t>(evId) );
 
 #ifdef __HAS_INDICATORS
-			mnd::PrintProgress(bar, evId, nentries, n_print_every);
+			mnd::PrintProgress(bar, evId, nentries, n_print_every, mnd::_dyn::dancer, 0.5);
 #endif
 			std::apply([](auto&... ps) {
 					(..., ps.ProcessEntry()); 
