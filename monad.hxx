@@ -112,9 +112,6 @@
 #	include "indicators/indicators.hh"
 #endif
 
-#define _STR_IMPL_MND(x) #x
-#define _TO_STRING_MND(x) _STR_IMPL_MND(x)
-
 #ifdef __unix__
 #	define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #elif defined(__WIN32) || defined(WIN32)
@@ -322,6 +319,10 @@ MND_RUSTIFY_TYPE( 8)
 MND_RUSTIFY_TYPE(16)
 MND_RUSTIFY_TYPE(32)
 MND_RUSTIFY_TYPE(64)
+using f64 = double;
+using f32 = float;
+
+#undef MND_RUSTIFY_TYPE
 
 template<typename T, std::size_t N>
 void Add(std::array<T,N>& lhs, const std::array<T,N>& rhs);
