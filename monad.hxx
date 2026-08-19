@@ -1986,6 +1986,14 @@ struct PerThreadWriter {
 };
 
 inline std::unordered_set<std::string> g_loaded_containers {};
+namespace _private { inline std::string g_input_file {}; }
+
+inline void set_current_input_file(const std::string_view s) {
+    _private::g_input_file = s;
+}
+inline std::string const& get_current_input_file() noexcept {
+    return _private::g_input_file;
+}
 
 } // namespace mnd
 
@@ -2046,10 +2054,11 @@ private:
 public:
 	TAnalysisProcess() = default;
 	TAnalysisProcess(std::string file_in, std::string file_out, std::string rn_out) :
-		TAnalysisProcess() {
-			info.in.fname  = std::move(file_in);
-			info.out.fname = std::move(file_out);
-			info.out.out_rnname = std::move(rn_out);
+	    TAnalysisProcess() {
+            info.in.fname  = std::move(file_in);
+            info.out.fname = std::move(file_out);
+            info.out.out_rnname = std::move(rn_out);
+            mnd::set_current_input_file( info.in.fname );
 		}
 	
 	explicit TAnalysisProcess(
