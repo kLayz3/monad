@@ -112,12 +112,14 @@
 #	include "indicators/indicators.hh"
 #endif
 
-#ifdef __unix__
-#	define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
-#elif defined(__WIN32) || defined(WIN32)
-#	define __FILENAME__  (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
-#else
-#	define __FILENAME__ __FILE__
+#ifndef __FILE_NAME__
+#	ifdef __unix__
+#		define __FILE_NAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+#	elif defined(__WIN32) || defined(WIN32)
+#		define __FILE_NAME__  (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
+#	else
+#		define __FILE_NAME__ __FILE__
+#	endif
 #endif
 
 // Regular text.
@@ -192,6 +194,19 @@
 #define EMPH1(x) KBH_CYN #x KNRM
 #define EMPH2(x) KBH_RED #x KNRM
 
+#define _MND_STRINGIFY_IMPL(x) #x
+#define MND_STRINGIFY(x) _MND_STRINGIFY_IMPL(x)
+#define MND_FILE_LINE_STR \
+	KGRN __FILE_NAME__ KNRM ":" KCYN MND_STRINGIFY(__LINE__) KNRM
+
+#define MND_EMPTY_MACRO(...)
+
+/* Sometimes Makefiles define specific `PROG_PATH` preproc and pass it directly to gcc,
+ * but linters can't catch this hehe. Just have it here. */
+#ifndef PROG_PATH
+#define PROG_PATH "mnd_PROG_PATH_not_defined"
+#endif
+
 /* ROOT-like Form() w/o dependency. */
 namespace mnd {
 inline const char* msg(const char* fmt, ...) {
@@ -226,7 +241,7 @@ inline void safe_write(int fd, const char* s, size_t n) noexcept {
 
 #define YELL(...) \
 	do { \
-		fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILENAME__, __LINE__); \
+		fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
 		fprintf(stderr, KBH_RED); fprintf(stderr, __VA_ARGS__); fprintf(stderr, KNRM); \
 	} while(0);
 
@@ -237,13 +252,13 @@ inline void safe_write(int fd, const char* s, size_t n) noexcept {
 
 #define WARN(...) \
 	do { \
-		fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILENAME__, __LINE__); \
+		fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
 		fprintf(stderr, __VA_ARGS__); \
 	} while (0);
 
 #define WARN_ASYNC(...) \
 	do { \
-		const char* msg_ = mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILENAME__, __LINE__); \
+		const char* msg_ = mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
 		mnd::safe_write(STDERR_FILENO, msg_, strlen(msg_)); \
 		const char* msg_v_ = mnd::msg(__VA_ARGS__); \
 		mnd::safe_write(STDERR_FILENO, msg_v_, strlen(msg_v_)); \
@@ -272,7 +287,7 @@ inline void safe_write(int fd, const char* s, size_t n) noexcept {
 
 #define MND_THROW(...) do { \
 	std::string what {}; \
-	what += mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILENAME__, __LINE__); \
+	what += mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
 	what += mnd::msg(__VA_ARGS__); \
 	throw std::runtime_error(what); \
 } while(0)
