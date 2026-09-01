@@ -481,10 +481,13 @@ void Append(std::vector<T>& dst, std::vector<T>&& src) noexcept {
 /* Filter a vector in-place based on the predicate `p`.
  * If `p` evaluates to true, element is kicked out. */
 template<typename T, typename Predicate>
-void Erase(std::vector<T>& v, Predicate p) noexcept (
-	std::is_nothrow_invocable_v<Predicate&, const T&> && std::is_nothrow_move_assignable_v<T> 	
-	/*^^^ I guess...? How else to check if the underlying block is noexcept? */
-) {
+void Erase(std::vector<T>& v, Predicate p)
+	noexcept (
+		   std::is_nothrow_invocable_v<Predicate&, T&>
+		&& std::is_nothrow_move_assignable_v<T>
+		&& std::is_nothrow_destructible_v<T>
+	) /*^^^ I guess...? How else to check if the underlying block is noexcept? */
+{
 	v.erase(std::remove_if(v.begin(), v.end(), std::move(p)), v.end());
 }
 
