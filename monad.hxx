@@ -14,8 +14,8 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this library.  If not, see <https://www.gnu.org/licenses/> 
- * or write to the Free Software Foundation, Inc., 51 Franklin Street, 
+ * along with this library.  If not, see <https://www.gnu.org/licenses/>
+ * or write to the Free Software Foundation, Inc., 51 Franklin Street,
  * Fifth Floor, Boston, MA  02110-1301  USA
  */
 
@@ -24,7 +24,7 @@
 
 #include <cmath>
 #include <cstdint>
-#include <cstdarg> 
+#include <cstdarg>
 #include <cstdlib>
 #include <cstdio>
 #include <cassert>
@@ -311,10 +311,10 @@ inline void safe_write(int fd, const char* s, size_t n) noexcept {
 #	undef eigen_assert
 
 #	define assert(expr) MND_ASSERT(expr)
-#	define eigen_assert(expr) MND_ASSERT(expr) 
+#	define eigen_assert(expr) MND_ASSERT(expr)
 #else
 
-#	define MND_ASSERT(expr) assert(expr) 
+#	define MND_ASSERT(expr) assert(expr)
 		
 #endif
 
@@ -353,7 +353,7 @@ void Add(std::vector<T>& lhs, const std::vector<T>& rhs);
  * under the appropriate define guard. */
 #if !defined(MND_INCLUDE_SPAN_IS_DEFINED)
 #define MND_INCLUDE_SPAN_IS_DEFINED
-#if __cplusplus >= 202000L 
+#if __cplusplus >= 202000L
 #	include <span>
 	namespace mnd {
 		template<typename T>
@@ -387,34 +387,34 @@ span<const T> as_span(const std::array<T, N>& a) noexcept {
 
 #if defined(__HAS_INDICATORS)
 inline void PrintProgress (
-	indicators::ProgressBar& bar, 
-	const u64 n_entry, 
-	const u64 max_entries, 
+	indicators::ProgressBar& bar,
+	const u64 n_entry,
+	const u64 max_entries,
 	const u64 step = 250,
 	span<std::string_view const> dynamic_frames = {},
-	double dynamic_update_freq = 0.5 /* seconds */ 
+	double dynamic_update_freq = 0.5 /* seconds */
 ) {
 	using namespace indicators;
 	using clock = std::chrono::steady_clock;
 	using ms = std::chrono::milliseconds;
 	
 	static u64 n_entry_called = 0;
-	static u64               current_dynamic_frame_i = 0; 
+	static u64               current_dynamic_frame_i = 0;
 	static std::string_view  current_dynamic_frame_v = "";
 	static clock::time_point current_dynamic_frame_t = {};
 
-	if(n_entry >= n_entry_called and 
+	if(n_entry >= n_entry_called and
 	   n_entry - n_entry_called < step) return;
 
 	const auto now = clock::now();
 
-	if(!dynamic_frames.empty() and 
-		std::chrono::duration_cast<ms>(now - current_dynamic_frame_t).count() 
-			> 1000*dynamic_update_freq ) 
+	if(!dynamic_frames.empty() and
+		std::chrono::duration_cast<ms>(now - current_dynamic_frame_t).count()
+			> 1000*dynamic_update_freq )
 	{
 		const size_t nframes = dynamic_frames.size();
 		std::string postfix = bar.get_postfix_text_only();
-		if( !current_dynamic_frame_v.empty() and 
+		if( !current_dynamic_frame_v.empty() and
 			postfix.size() >= current_dynamic_frame_v.size() and
 			postfix.compare (
 				postfix.size() - current_dynamic_frame_v.size(),
@@ -425,7 +425,7 @@ inline void PrintProgress (
 		) { // Remove the previous frame only if it is actually the suffix (of the postfix).
 			postfix.resize (
 				postfix.size() - current_dynamic_frame_v.size()
-            ); 
+            );
 		}
 		current_dynamic_frame_i++;
 		current_dynamic_frame_t = now;
@@ -441,22 +441,22 @@ inline void PrintProgress (
 	n_entry_called = n_entry;
 }
 namespace _dyn {
-inline constexpr auto dancer = std::array { 
-	std::string_view{" ┏(-_-)┛"}, 
+inline constexpr auto dancer = std::array {
+	std::string_view{" ┏(-_-)┛"},
 	std::string_view{" ┗(-_-)┓"},
 	std::string_view{" ┗(^_^)┛"},
-	std::string_view{" ┏(^_^)┓"} 
+	std::string_view{" ┏(^_^)┓"}
 };
 }
 #endif
 
-template<typename T>  
+template<typename T> 
 void QuickSwap(std::vector<T>& v, int i, int j) noexcept {
 	if(!v.size()) return;
     std::swap(v[i], v[j]);
 }
 
-template<typename T>  
+template<typename T> 
 void QuickErase(std::vector<T>& v, int i) noexcept {
     std::swap(v[i], v.back());
     v.pop_back();
@@ -478,10 +478,10 @@ void Append(std::vector<T>& dst, std::vector<T>&& src) noexcept {
 	/* src vector left in undefined state. */
 }
 
-/* Filter a vector in-place based on the predicate `p`. 
+/* Filter a vector in-place based on the predicate `p`.
  * If `p` evaluates to true, element is kicked out. */
 template<typename T, typename Predicate>
-void Erase(std::vector<T>& v, Predicate p) noexcept ( 
+void Erase(std::vector<T>& v, Predicate p) noexcept (
 	std::is_nothrow_invocable_v<Predicate&, const T&> && std::is_nothrow_move_assignable_v<T> 	
 	/*^^^ I guess...? How else to check if the underlying block is noexcept? */
 ) {
@@ -515,7 +515,7 @@ bool isfinite(Ts&&... ts) { /* All must pass the predicate. */
 	static_assert(
 		(std::is_arithmetic_v<
 			std::remove_reference_t<Ts>
-		> && ...), 
+		> && ...),
 		"Types passed must be arithmetic, basic types.");
 	return (std::isfinite(ts) && ...);
 }
@@ -554,7 +554,7 @@ void PrintElapsed(const TimePoint& end, const TimePoint& start) {
 		if(elapsed > 60) {
 			elapsed *= static_cast<double>(kMINUTE) / static_cast<UT>(kSECOND);
 			mode_i = 3;
-		} else 
+		} else
 			mode_i = 2;
 	}
 	else if constexpr(E == kMILLISECOND) {
@@ -582,7 +582,7 @@ void PrintElapsed(std::vector<TimePoint>&& v) {
 }
 
 /**
- * Concatenates bunch of string arguments which can be lvalues, statics, etc. and returns an owned std::string. 
+ * Concatenates bunch of string arguments which can be lvalues, statics, etc. and returns an owned std::string.
  */
 template<typename... Args>
 std::string sstrcat(Args&&... args) {
@@ -611,7 +611,7 @@ enum class BinaryOpt : i32 { No = 0, Yes = 1 };
 
 /**
  * Apply 'std::visit' https://en.cppreference.com/w/cpp/utility/variant/visit2.html
- * to the mnd::Variant type. Throws if the 'mnd::Empty' type is encountered. 
+ * to the mnd::Variant type. Throws if the 'mnd::Empty' type is encountered.
  */
 template<typename Visitor, typename Var>
 decltype(auto) visit_non_empty(Visitor&& vs, Var&& /* Variant&& */ var) {
@@ -620,7 +620,7 @@ decltype(auto) visit_non_empty(Visitor&& vs, Var&& /* Variant&& */ var) {
 			using T = std::decay_t<decltype(value)>;
 			if constexpr(std::is_same_v<T, Empty>)
 				throw std::runtime_error("mnd::visit_non_empty except: `Empty` type encountered.");
-			else 
+			else
 				return std::invoke(std::forward<Visitor>(vs),
 					std::forward<decltype(value)>(value));
 		},
@@ -635,11 +635,11 @@ void _for_each_in_tuple_impl(Tuple&& t, Callable&& f, std::index_sequence<Is...>
 template<typename Tuple, typename Callable>
 void for_each_in_tuple(Tuple&& t, Callable&& f) {
 	constexpr std::size_t N = std::tuple_size_v<std::decay_t<Tuple>>;
-	_for_each_in_tuple_impl(std::forward<Tuple>(t), std::forward<Callable>(f), 
+	_for_each_in_tuple_impl(std::forward<Tuple>(t), std::forward<Callable>(f),
 		std::make_index_sequence<N>{});
 }
 
-template<typename> 
+template<typename>
 inline constexpr bool always_false_v = false;
 
 template<typename T>
@@ -681,14 +681,14 @@ struct is_indexable_range <
 		decltype(std::declval<T&>().size()),
 		decltype(std::declval<T&>()[std::declval<std::size_t>()])
 	>
-> : std::true_type { 
+> : std::true_type {
 	using underlying_type = typename T::value_type;
 };
 
 template<typename T, typename = void>
 struct has_clean_noexcept : std::false_type {};
 template<typename T>
-struct has_clean_noexcept <T, 
+struct has_clean_noexcept <T,
 	std::void_t<decltype(std::declval<T&>().Clean())>
 > : std::bool_constant <
 		std::is_same_v<void, decltype(std::declval<T&>().Clean())> &&
@@ -883,7 +883,7 @@ template<typename T,
 		if(f.is_open()) return f;
 		else return {};
 	}
-	else 
+	else
 		static_assert(std::is_constructible_v<std::string, T&&>,
 			"Type not constructible to ifstream or path-like type.");
 }
@@ -897,7 +897,7 @@ template<typename T,
 	typename U = std::decay_t<T>
 > Maybe<std::string> get_file_path(T&& arg) {
 	static_assert(is_pathlike_arg_v<U>, "Type <T> must be path-like");
-	if constexpr(std::is_base_of_v<std::istream, U>) 
+	if constexpr(std::is_base_of_v<std::istream, U>)
 		return {};
 	else if constexpr(std::is_constructible_v<std::string, T&&>)
 		return std::string(std::forward<T>(arg));
@@ -970,28 +970,39 @@ template<typename T,
 
 /* Next few routines serve to violently unroll loops.
  * Namely, GCC sometimes even in -03 refuses to unroll small loops (I don't understand why).
- * The pragma unroll only works if the loop size is known at preproc time. 
+ * The pragma unroll only works if the loop size is known at preproc time.
  * ... Also unrolling over a static-sized container. :-) */
-template<std::size_t Offset, typename Sequence>
+template<std::size_t Offset, typename Sequence, bool reversed>
 struct offset_sequence;
 
 template<std::size_t Offset, std::size_t... Is>
-struct offset_sequence<Offset, std::index_sequence<Is...>> {
-	using type = std::index_sequence<(Offset + Is)...>; 
+struct offset_sequence<Offset, std::index_sequence<Is...>, false> {
+	using type = std::index_sequence<(Offset + Is)...>;
 	// a sequence: Offset, Offset+1, ..., Offset-1 + sizeof...(Is)
 };
+template<std::size_t Offset, std::size_t... Is>
+struct offset_sequence<Offset, std::index_sequence<Is...>, true> {
+	using type = std::index_sequence<(Offset - Is)...>;
+	// a sequence: Offset, Offset-1, ..., Offset+1 - sizeof...(Is)
+};
 
-template<std::size_t Begin, std::size_t End>
-using make_index_range =
+template<
+	std::size_t Begin,
+	std::size_t End
+> using make_index_range =
 	typename offset_sequence <
 		Begin,
-		std::make_index_sequence<End - Begin>
-	>::type; /* == std::index_sequence<Begin, Begin+1, ..., End-1> */
+		std::make_index_sequence <
+			(Begin <= End) ? (End-Begin) : (Begin-End)
+		>,
+		(Begin > End)
+	>::type; /*     std::index_sequence<Begin, Begin+1, ..., End-1> */
+	         /* or: std::index_sequence<Begin, Begin-1, ..., End+1> */
 
-template < 
-	typename Callable, 
+template <
+	typename Callable,
 	std::size_t... Is
-> void _static_for_impl(Callable&& f, std::index_sequence<Is...>) 
+> void _static_for_impl(Callable&& f, std::index_sequence<Is...>)
 	noexcept((std::is_nothrow_invocable <
 		Callable&, std::integral_constant<std::size_t, Is>
 	>::value && ...))
@@ -1001,14 +1012,13 @@ template <
 template <
 	std::size_t Begin,
 	std::size_t End,
-	typename Callable 
-> void static_for(Callable&& f) 
+	typename Callable
+> void static_for(Callable&& f)
 	noexcept( noexcept(_static_for_impl(
-		std::forward<Callable>(f), 
-		mnd::make_index_range<Begin, End>{}
+		std::forward<Callable>(f),
+		make_index_range<Begin, End>{}
 	)))
 {
-	static_assert(End >= Begin, "mnd::static_for requires End >= Begin");
 	_static_for_impl(std::forward<Callable>(f), make_index_range<Begin, End>{});
 }
 
@@ -1022,10 +1032,10 @@ template <
 
 /* Functor invocation simply gets folded over the entire static-sized container. */
 template <
-	typename Arr, 
-	typename Callable, 
+	typename Arr,
+	typename Callable,
 	std::size_t... Is
-> void _static_for_each_impl(Arr&& arr, Callable&& f, std::index_sequence<Is...>) 
+> void _static_for_each_impl(Arr&& arr, Callable&& f, std::index_sequence<Is...>)
 	noexcept((noexcept(std::invoke(
 		std::declval<Callable&>(),
 		std::declval<Arr>()[Is]
@@ -1035,20 +1045,20 @@ template <
 }
 
 template <
-	typename Arr, 
-	typename Callable 
-> void static_for_each(Arr&& arr, Callable&& f) 
+	typename Arr,
+	typename Callable
+> void static_for_each(Arr&& arr, Callable&& f)
 	noexcept( noexcept(_static_for_each_impl(
 		std::forward<Arr>(arr),
 		std::forward<Callable>(f),
 		std::make_index_sequence <
-			mnd::len<std::remove_cv_t<std::remove_reference_t<Arr>>>() 
+			mnd::len<std::remove_cv_t<std::remove_reference_t<Arr>>>()
 		>{}
 	)))
 {
 	using Bare = std::remove_cv_t<std::remove_reference_t<Arr>>;
 	constexpr std::size_t N = mnd::len<Bare>();
-	_static_for_each_impl(std::forward<Arr>(arr), std::forward<Callable>(f), 
+	_static_for_each_impl(std::forward<Arr>(arr), std::forward<Callable>(f),
 		std::make_index_sequence<N>{});
 }
 
@@ -1091,7 +1101,7 @@ struct MeanVar {
 		return os << rhs.mean << " ± " << std::sqrt( rhs.var );
 	}
 
-	inline std::string string() const noexcept { 
+	inline std::string string() const noexcept {
 		std::stringstream ss;
 		ss << *this;
 		return ss.str();
@@ -1138,7 +1148,7 @@ template <
 	typename Bare = std::remove_cv_t<std::remove_reference_t<Range>>,
 	typename = typename std::enable_if_t<!is_an_array<Bare>::value>
 > MeanVar mean_var(const Range& r) {
-	static_assert(mnd::is_range<Range>::value, 
+	static_assert(mnd::is_range<Range>::value,
 		"Type `Range` must be an MONAD-compatible range.");
 	using T = typename mnd::is_range<Range>::underlying_type;
 	static_assert(std::is_convertible_v<T, double>,
@@ -1175,7 +1185,7 @@ constexpr std::array<T, N> make_filled_array(T value) {
 	return _make_filled_array_impl<T>(value, std::make_index_sequence<N>{});
 }
 
-/* Returns the name of the type passed, also adding 
+/* Returns the name of the type passed, also adding
  * ref-cv qualifiers. Demangles templated types, too :-) */
 template<typename T,
 	typename U = std::decay_t<T>	
@@ -1206,7 +1216,7 @@ template<typename T,
 
 /* Sometimes cursor can be hidden mid execution,
  * if the program dies due to a system signal,
- * execute this to bring it back. Only POSIX async-safe 
+ * execute this to bring it back. Only POSIX async-safe
  * calls are allowed. NOTE: this *might* disable standard ROOT
  * stack trace dump in case of SIGSEGV catch. Unmap it in this case.
  * and in Linux shell execute 'tput cnorm' to get the cursor back. */
@@ -1219,7 +1229,7 @@ inline void sig_callback_handler(int signum) {
 	_exit(128 + signum);
 }
 
-constexpr std::size_t CL = 
+constexpr std::size_t CL =
 #if defined(__cpp_lib_hardware_interference_size) && defined(__clang__)
 	std::hardware_destructive_interference_size
 #elif defined(__x86_64__)
@@ -1240,16 +1250,16 @@ struct TOnceBase {
 	TOnceBase& operator=(const TOnceBase& ) = default;
 	TOnceBase(TOnceBase&& ) noexcept = default;
 	TOnceBase& operator=(TOnceBase&& ) noexcept = default;
-	virtual ~TOnceBase() = default; 
+	virtual ~TOnceBase() = default;
 
 	virtual Int_t Write(TFile* file = nullptr, const char* target = "") = 0;
 	virtual void* Load(TFile* file, const char* target = "") = 0;
 	virtual void Collect(const TOnceBase& ) = 0;
 	virtual	std::unique_ptr<TOnceBase> Clone() const = 0;
 
-	inline virtual void SetName(std::string name, const char* title = "") { 
+	inline virtual void SetName(std::string name, const char* title = "") {
 		(void)title;
-		_name = std::move(name); 
+		_name = std::move(name);
 	}
 
 	inline const char* GetName() const noexcept { return this->_name.c_str(); }
@@ -1260,7 +1270,7 @@ protected:
 
 /**
  * A wrapper type for objects (such as TVectorD, THXX, TArray, TCutG, etc)
- * but also stl-containers such as std::vector<T>, std::array<T, N>, etc that might carry 
+ * but also stl-containers such as std::vector<T>, std::array<T, N>, etc that might carry
  * a name or maybe not. This type wraps them so that all of these types' instances carry a name,
  * which shall be serialized (once) into a `TFile`.
  * Unlike `TContainer`'s other parts which will be serialized row-wise (per-event) into the RNTuple.
@@ -1278,12 +1288,12 @@ protected:
  *         void Mean(T& lhs, const T& rhs)
  *         T& operator+=(const T& rhs) and T& operator/=(const int) (such as 'int', 'double')
  *
- *  The collector will sum up all the instances of identical Sum type, 
+ *  The collector will sum up all the instances of identical Sum type,
  *  and make a mean value of all the instances of identical Mean type.
  *  Collecting is done via a dyadic (binary) fold, e.g. for 8 instances of TOnce<T> objects:
  *
- *  a0, a1, a2, a3, a4, a5, a6, a7 
- *    \/      \/      \/      \/    
+ *  a0, a1, a2, a3, a4, a5, a6, a7
+ *    \/      \/      \/      \/   
  *   a01,    a23,    a45,    a67
  *      \   /           \   /
  *      a0123     ,     a4567
@@ -1291,7 +1301,7 @@ protected:
  *            a01234567
  *
  * It is done in-place, a0 now carries the summed/mean'ed up value, while the other (N-1)
- * instances carry possibly intermediate calculations, and should not be used. All together, the transformation 
+ * instances carry possibly intermediate calculations, and should not be used. All together, the transformation
  * looks like this:
  * ▶ a0 → a01234567
  * ▶ a1 → a1
@@ -1301,15 +1311,15 @@ protected:
  * ▶ a5 → a5
  * ▶ a6 → a67
  * ▶ a7 → a7
- * 
+ *
  * In the master Pool instantization, it's asserted that N forms a perfect log2: ∃n ∈ ℕ₀ | N == 2^n.
  *
  * To make your type `T` fit into this picture, usual procedure is to define a free function (non-templated;
  * most specific overload) `void Add(T&, const T&)` or `void Mean(T&, const T&)`,
  * Or you supply a custom collector (function pointer) to the constructor of this wrapper type.
  * Passing a function pointer instead will force that specific invocation instead of compiler-deduced one
- * There *might* still be a valid function declaration seen; e.g. on top I declare a free Add symbol for all 
- * std::array/vector. In case this gives a bad resolution (recursion fails at bottommost non-array type), 
+ * There *might* still be a valid function declaration seen; e.g. on top I declare a free Add symbol for all
+ * std::array/vector. In case this gives a bad resolution (recursion fails at bottommost non-array type),
  * then just define the type-specific no-op overload yourself (no template shenanigans).
  */
 
@@ -1335,7 +1345,7 @@ public:
 	/* Case 1: T constructible with (const char*, Args&&...) */
 	template<typename... Ts,
 		typename std::enable_if<std::is_constructible_v<T, const char*, Ts...>>::type* = nullptr
-	> TOnce(const char* name, Ts&&... args) : TOnceBase(name), 
+	> TOnce(const char* name, Ts&&... args) : TOnceBase(name),
 		_internal(name, std::forward<Ts>(args)...) {}
 
 	/* Case 2: T constructible with (Args&&...) but not (const char*, Args&&...) */
@@ -1359,7 +1369,7 @@ public:
 				else if(il.size() == _internal.size())
 					std::copy(il.begin(), il.end(), _internal.begin());
 				else
-					assert(il.size() == _internal.size() && "Initializer list for std::array<T,N> must have either 0, 1 or N members"); 
+					assert(il.size() == _internal.size() && "Initializer list for std::array<T,N> must have either 0, 1 or N members");
 			}
 			else static_assert(std::is_constructible_v<U, std::initializer_list<typename U::value_type>>,
 				"Type doesn't correctly support initializer lists ctor.");
@@ -1371,12 +1381,12 @@ public:
 	
 	/* Case 5: Custom collector + name. Delegates to either [1] or [2] */
 	template<typename... Ts>
-		TOnce(const char* name, void (*fn)(T&, const T&), Ts&&... args) : TOnce(name, std::forward<Ts>(args)...) 
+		TOnce(const char* name, void (*fn)(T&, const T&), Ts&&... args) : TOnce(name, std::forward<Ts>(args)...)
 		{ _collector = fn; }
 	
 	/* Case 5.5: same as previous, but with init list. */
 	template<typename U = T, typename std::enable_if<mnd::has_value_type<U>::value>::type* = nullptr>
-		TOnce(const char* name, void (*fn)(T&, const T&), std::initializer_list<typename U::value_type> il) 
+		TOnce(const char* name, void (*fn)(T&, const T&), std::initializer_list<typename U::value_type> il)
 		: TOnce(name, il) { _collector = fn; }
 
 	void SetName(std::string name, const char* title = "") override {
@@ -1393,16 +1403,16 @@ public:
 		if(!f || f->IsZombie() || !f->IsOpen()) {
 			f = gDirectory->GetFile();
 			if(!f || f->IsZombie() || !f->IsOpen())
-				ERROR("%s [[ %s ]] (label: \'%s\') : output ROOT file not supplied or invalid and gDirectory holds no open valid file. (f=0x%016lx)", 
+				ERROR("%s [[ %s ]] (label: \'%s\') : output ROOT file not supplied or invalid and gDirectory holds no open valid file. (f=0x%016lx)",
 					_name.c_str(), _SELF_TYPE_CSTR, name, (uintptr_t)f);
 		}
 
 		if constexpr(std::is_base_of_v<TObject, T>)
 			return f->WriteTObject(&_internal, *name ? name : _name.c_str());
-		else 
+		else
 			return f->WriteObject (&_internal, *name ? name : _name.c_str());
 	}
-    
+   
 	void* Load(TFile* f, const char* target = "") override {
 		const char* name = *target ? target : _name.c_str();
 		if(!name || ! *name) ERROR("Unnamed TOnce<T> object while trying to load from a file.");
@@ -1475,11 +1485,11 @@ public:
 		copy->_collector = this->_collector;
 		return copy;
 	}
- 
+
 	void Collect(const TOnceBase& rhs) override {
 		const TOnce<T>* cvt = dynamic_cast<const TOnce<T>*> (&rhs);
 
-		if( !cvt) 
+		if( !cvt)
 			ERROR("Type: %s, wrapped type: %s. TOnce object name \'%s\'. In Collect(..) - dynamic cast failed. "
 				"RHS is named \'%s\'", _SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
 				this->GetName(), rhs.GetName());
@@ -1510,16 +1520,16 @@ public:
 			_internal /= 2;
 		}
 		/* This is tricky part. We should not issue a compile time error, since runtime collector can be provided.
-		 * But compiler cannot know this ahead of time. Therefore, in this case issue a runtime error (an std::abort). 
-		 * Now, for generic templates, sometime an overload will match the template, but remain undefined, provocing 
-		 * an lderror. This is a TODO. Temporary fix: user-defined strictest overload as a no-op to shut up the linker. 
-		 * IDK, maybe define and catch last-resort a generic symbol: 
+		 * But compiler cannot know this ahead of time. Therefore, in this case issue a runtime error (an std::abort).
+		 * Now, for generic templates, sometime an overload will match the template, but remain undefined, provocing
+		 * an lderror. This is a TODO. Temporary fix: user-defined strictest overload as a no-op to shut up the linker.
+		 * IDK, maybe define and catch last-resort a generic symbol:
 		 * template<typename T> void AddG_(T&, const T&) {} ? Then warn users that the code flow bounces here I guess. */
-		else { 
+		else {
 			ERROR("(%s) - Name: '\%s\' ; Underlying type \'%s\' doesn't define how to add or mean-up two instances, "
 					"and also its been constructed without a runtime callback. "
 					"Define a `void Add(T&, const T& )` function or pass a lambda as second argument "
-					"of \'RegisterObject(..)\' (or another ctor).", 
+					"of \'RegisterObject(..)\' (or another ctor).",
 					_SELF_TYPE_CSTR, this->GetName(), mnd::type_name<T>().c_str());
 		}
 	}
@@ -1544,10 +1554,10 @@ namespace mnd {
 #endif
 
 /* A free function, if type `T` is tucked away behind std::array|vector.
- * This also recurses nicely into std::array< std::array<... >>, as long as the 
+ * This also recurses nicely into std::array< std::array<... >>, as long as the
  * underlying type at the base implements the Add function.
  * Further specializations will over-specialize and this generic overload won't get selected. */
-template<typename T, std::size_t N> 
+template<typename T, std::size_t N>
 void Add(std::array<T, N>& lhs, const std::array<T, N>& rhs) {
 	for(std::size_t i = 0; i < N; ++i) {
 		if constexpr(mnd::has_free_add_fn<T>::value) {
@@ -1571,7 +1581,7 @@ void Add(std::array<T, N>& lhs, const std::array<T, N>& rhs) {
 		}
 	}
 }
-template<typename T> 
+template<typename T>
 void Add(std::vector<T>& lhs, const std::vector<T>& rhs) {
 	const std::size_t N = lhs.size();
 	if(N != rhs.size())
@@ -1617,7 +1627,7 @@ struct TContainerBase {
 	TContainerBase() = default;
 	TContainerBase(std::string name) : _name(std::move(name)) {}
 
-	/** 
+	/**
 	 * Should be initial (optional) call. Setting up persistent metadata, and names.
 	 */
 	virtual void Init(TDictInfo info) { (void)info; }
@@ -1631,7 +1641,7 @@ struct TContainerBase {
 /**
  * Encapsulates a type needed to be used as a (de)serialization target
  * from/to RNTuple column. It still is an abstract type, since the `Setup()` method remains pure virtual.
- * Users are at most expected to extend it and define the Setup() method, where the `RegisterObject` methods 
+ * Users are at most expected to extend it and define the Setup() method, where the `RegisterObject` methods
  * will be chained, to give back the raw resource handles to the users' derived container class.
  */
 template<typename T>
@@ -1661,27 +1671,27 @@ public:
 
 	/* Ok, some clarification. Lets say `struct Derived : TContainer<T>` is the derived class.
 	 * Then the next two methods below must get called in `Derived::Setup()`.
-	 * We create the objects, pulling the read-only objects from disk, and receiving back a shared handle of the resource. 
+	 * We create the objects, pulling the read-only objects from disk, and receiving back a shared handle of the resource.
 	 * This works fine for the original TContainer<T> instance.
-	 * But when cloning a TAnalysisProcess, it clones the underlying 'TProcessor<Out(Ins...)>' types. 
+	 * But when cloning a TAnalysisProcess, it clones the underlying 'TProcessor<Out(Ins...)>' types.
 	 * Instance behind `this` pointer, for the reader, is created via the copy ctor of the TContainer<T>,
 	 * while the write instances are default constructed. The clone's ctor will also call this sequence initially, each pulling its own
-	 * copy of the read-objects from disk into RAM using unnecessary memory. Simple and nice would be if all the clones own a 
+	 * copy of the read-objects from disk into RAM using unnecessary memory. Simple and nice would be if all the clones own a
 	 * read-only shared pointer to a single instance of such objects.
 	 * - key difference is that then the 'original' TAnalysisProcess singleton will simply switch the clones' variant to non-owning
-	 * type, and the temporarily created (unique) objects of the clone will get deleted. 
+	 * type, and the temporarily created (unique) objects of the clone will get deleted.
 	 * This is important for read containers - as only one set of these `TOnce<T>` objects will get (de)serialized.
-	 * Clones and the original holds the shared pointers. 
+	 * Clones and the original holds the shared pointers.
 	 * For write containers, each clone has its own unique copy. */
 
 	/**
 	 * Create an object to be serialized to/from a ROOT file. Two overloads exist for passing an
-	 * initializer list ctor (like for `std::array<T>`) or a basic forwarding ctor (emplace-style). 
+	 * initializer list ctor (like for `std::array<T>`) or a basic forwarding ctor (emplace-style).
 	 */
 	template<typename U>
 	[[nodiscard]] U* RegisterObject(const char* name, std::initializer_list<typename U::value_type> il) {
 		/* Flag the owned object with `CONTAINERNAME_` prefix. */
-		std::string obj_name = mnd::sstrcat(this->GetName(), "_", name); 
+		std::string obj_name = mnd::sstrcat(this->GetName(), "_", name);
 		for(auto& o : _vc) {
 			if(! strcmp(o->GetName(), obj_name.c_str())) {
 				TOnce<U> *dcast = dynamic_cast<TOnce<U>*>( o.get() );
@@ -1712,7 +1722,7 @@ public:
 	template<typename U, typename... Ts>
 	[[nodiscard]] U* RegisterObject(const char* name, Ts&&... args) {
 		/* Flag the owned object with `CONTAINERNAME_` prefix. */
-		std::string obj_name = mnd::sstrcat(this->GetName(), "_", name); 
+		std::string obj_name = mnd::sstrcat(this->GetName(), "_", name);
 		for(auto& o : _vc) {
 			if(! strcmp(o->GetName(), obj_name.c_str())) {
 				TOnce<U> *dcast = dynamic_cast<TOnce<U>*>( o.get() );
@@ -1756,7 +1766,7 @@ public:
 };
 
 /* Type `T` is either something like TXXXYYYEvent (Go4) or a custom structure
- * for UCESB. 
+ * for UCESB.
  * Namely, UCESB splits all the trees directly into leaves, so address has to be mapped
  * sequentally.
  */
@@ -1815,7 +1825,7 @@ template<typename Out, typename... Ins>
 struct TProcessor<Out(Ins...)> : TProcessorBase {
 	static_assert((std::disjunction_v<
 		mnd::is_base_of_template<TContainer, Ins>,
-		mnd::is_base_of_template<TRawContainer, Ins>> && ...), 
+		mnd::is_base_of_template<TRawContainer, Ins>> && ...),
 		"Input type(s) must inherit from (or be) TContainer<T> / TRawContainer<T>.");
 	static_assert(mnd::is_base_of_template<TContainer, Out>::value, "Output type must inherit from (or be) TContainer<T>.");
 
@@ -1824,18 +1834,18 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 	
 	TProcessor() = default;
 
-	/** 
+	/**
 	 * Only other acceptable param ctor is to take ownership from an existing output object.
 	 * The output object doesn't need to be specifically `std::move`'ed to be less verbose in user code.
 	 * But the Processor does take full ownership of the resource behind this reference.
 	 * Input objects, might be shared between different subprocesses - here we simply make our own copy.
 	 */
-	explicit TProcessor(Out& _out, const Ins&... ins) : 
+	explicit TProcessor(Out& _out, const Ins&... ins) :
 		out(std::move(_out)), in(std::make_tuple(ins...)) {}
 
-	TProcessor(const TProcessor& rhs) : TProcessorBase(rhs), 
-		out(rhs.out), 
-		in(rhs.in) /* _vc from each input will just get copied - sharing the *same* pointers. */ 
+	TProcessor(const TProcessor& rhs) : TProcessorBase(rhs),
+		out(rhs.out),
+		in(rhs.in) /* _vc from each input will just get copied - sharing the *same* pointers. */
 		{
 			out._vc.clear();
 
@@ -1845,7 +1855,7 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 				out._vc.emplace_back( v->Clone() );
 
 			/* Previous for-loop constructs the objects, the next dynamic dispatch
-			 * will just give the raw pointer handles back to the user. */ 
+			 * will just give the raw pointer handles back to the user. */
 			out.Setup();
 		}
 	/*  ^^^^^ Now, each `_vc` is completely unique in the output container. */
@@ -1871,13 +1881,13 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 	/**
 	 * Returns a reference to the input container.
 	 */
-	template<u32 N = 0> 
+	template<u32 N = 0>
 	decltype(auto) GetInput() const& {
 		static_assert(N < std::tuple_size_v<decltype(in)>, "Accessing N >= tuple size.");
 		return ( std::get<N>(in).inner() );
 	}
 
-	template<u32 N = 0> 
+	template<u32 N = 0>
 	decltype(auto) GetInput() & {
 		static_assert(N < std::tuple_size_v<decltype(in)>, "Accessing N >= tuple size.");
 		return ( std::get<N>(in).inner() );
@@ -1896,7 +1906,7 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 			lvc[i]->Collect( *rvc[i] );
 	}
 
-}; // TProcessor 
+}; // TProcessor
 
 template<u32, typename...> struct TAnalysisPool;
 
@@ -1932,12 +1942,12 @@ using PerThreadReader = Variant <
 	TTreePerThreadReader
 >;
 
-/** 
+/**
  * Return codes:
  * 0  => properly set-up.
  * 1  => variant in empty state
- * 2  => switched to TTree variant but file handle is null. 
- * 4  => switched to TTree variant but ttree handle is null. 
+ * 2  => switched to TTree variant but file handle is null.
+ * 4  => switched to TTree variant but ttree handle is null.
  * 8  => switched to RNTuple variant but model isn't null.
  * 16 => switched to RNTuple variant but reader is null.
  */
@@ -1975,7 +1985,7 @@ struct PerThreadWriter {
 			p->reset();
 	}
 
-	/** 
+	/**
 	 * Return codes:
 	 * 0 => properly set-up.
 	 * 1 => pwriter variant in empty state
@@ -1988,11 +1998,11 @@ struct PerThreadWriter {
 		if(IsEmpty(pwriter)) r |= 0x1;
 		else if ( /* Try to cast to 1st type instance. */
 			auto* p = std::get_if<std::unique_ptr<RExp2::RNTupleParallelWriter>>(&pwriter);
-			p != nullptr && *p == nullptr 
+			p != nullptr && *p == nullptr
 		)                          r |= 0x2;
 		else if ( /* Try to cast to 2nd type instance. */
 			auto* p = std::get_if<RExp2::RNTupleParallelWriter*>(&pwriter);
-			p != nullptr && *p == nullptr 
+			p != nullptr && *p == nullptr
 		)                          r |= 0x2;
 		if(! ctx)                  r |= 0x4;
 		if(! entry)                r |= 0x8;
@@ -2014,8 +2024,8 @@ inline std::string const& get_current_input_file() noexcept {
 
 
 /**
- * Represents the full analysis process, where an input entry 
- * will go through all of the `T::ProcessEntry()` for each of the 
+ * Represents the full analysis process, where an input entry
+ * will go through all of the `T::ProcessEntry()` for each of the
  * sequential processes to create a complete output event.
  *
  * It holds a queue of entries that the main thread distributes, and encapsulates
@@ -2081,7 +2091,7 @@ public:
 		mnd::IOInfo&& _info,
 		mnd::PerThreadReader&& _reader,
 		mnd::PerThreadWriter&& _writer
-	) : _proc(std::move(w)), info(std::move(_info)), 
+	) : _proc(std::move(w)), info(std::move(_info)),
 		reader(std::move(_reader)), writer(std::move(_writer)) {}
 
 	TAnalysisProcess(const TAnalysisProcess& rhs) : TAnalysisProcess{} {
@@ -2096,7 +2106,7 @@ public:
 	/* Move ops cannot be defaulted due to std::atomic<T> */
 	TAnalysisProcess(TAnalysisProcess&& rhs) :
 		q        {},
-		_running ( false                  ), 
+		_running ( false                  ),
 		_do_write( rhs._do_write          ),
 		_thread  ( std::move(rhs._thread) ),
 		_proc    ( std::move(rhs._proc)   ),
@@ -2106,13 +2116,13 @@ public:
 	
 	TAnalysisProcess& operator=(TAnalysisProcess&& rhs) noexcept {
 		if(this == &rhs) return *this;
-		_running  = false                 ;  
-		_do_write = rhs._do_write         ; 
-		_thread   = std::move(rhs._thread); 
-		_proc     = std::move(rhs._proc)  ; 
-		info      = std::move(rhs.info)   ; 
-		reader    = std::move(rhs.reader) ; 
-		writer    = std::move(rhs.writer) ; 
+		_running  = false                 ; 
+		_do_write = rhs._do_write         ;
+		_thread   = std::move(rhs._thread);
+		_proc     = std::move(rhs._proc)  ;
+		info      = std::move(rhs.info)   ;
+		reader    = std::move(rhs.reader) ;
+		writer    = std::move(rhs.writer) ;
 		return *this;
 	}
 
@@ -2120,9 +2130,9 @@ public:
 
 	/* Adding a new proc mutates the type of the object. */
 
-	/** 
+	/**
 	 * Reference-qualified: take an l/rvalue ref of an existing process object and
-	 * eat up the object. Now we own it. Moves *this* object into a new one. 
+	 * eat up the object. Now we own it. Moves *this* object into a new one.
 	 */
 	template <typename W,
 		typename U = std::decay_t<W>
@@ -2131,19 +2141,19 @@ public:
 			std::move(_proc),
 			std::tuple<U>(std::move(w))
 		);
-		return TAnalysisProcess<Ts..., U> ( 
-			std::move(new_proc), std::move(info), 
+		return TAnalysisProcess<Ts..., U> (
+			std::move(new_proc), std::move(info),
 			std::move(reader), std::move(writer)
 		);
 	}
 	
-	/** 
-	 * Emplace-style construction, again move *this* object into a new one. 
+	/**
+	 * Emplace-style construction, again move *this* object into a new one.
 	 */
 	template <
 		typename U,      /* U = child of TProcessor<Out(Ins...)> */
 		typename Out,    /* Output container type. Deduced */
-		typename... Args 
+		typename... Args
 	> auto emplace_process(Out&& out, Args&&... args) && -> TAnalysisProcess<Ts..., U> {
 		/* In the varargs following, load the input containers, *before* constructing the processor. */
 		(..., LoadTOnceInputs(args));
@@ -2152,15 +2162,15 @@ public:
 			std::move(_proc),
 			std::make_tuple( U(std::forward<Out>(out), std::forward<Args>(args)... ) )
 		);
-		return TAnalysisProcess<Ts..., U> ( 
-			std::move(new_proc), std::move(info), 
+		return TAnalysisProcess<Ts..., U> (
+			std::move(new_proc), std::move(info),
 			std::move(reader), std::move(writer)
 		);
 	}
 
 	/**
 	 * A true independent copy of the object, meant to populate the pool singleton
-	 * with clones of the initial processor object. 
+	 * with clones of the initial processor object.
 	 */
 	void Clone(TAnalysisProcess& dest) const { /* Only clone from the original object. */
 		auto* p = std::get_if<std::unique_ptr<RExp2::RNTupleParallelWriter>>(&writer.pwriter);
@@ -2210,7 +2220,7 @@ public:
 		return rv;
 	}
 
-	Int_t GetEntry(Long64_t entry) const noexcept { 
+	Int_t GetEntry(Long64_t entry) const noexcept {
 		if(mnd::IsEmpty(reader))
 			ERROR("Empty input TTree/RNTuple. Invalid");
 		else if(std::holds_alternative<mnd::RNPerThreadReader>(reader)) {
@@ -2224,8 +2234,8 @@ public:
 		}
 	}
 
-	u64 GetEntries() const noexcept { 
-		if(mnd::IsEmpty(reader)) 
+	u64 GetEntries() const noexcept {
+		if(mnd::IsEmpty(reader))
 			ERROR("Empty input TTree/RNTuple in GetEntries call. Invalid");
 		else if(std::holds_alternative<mnd::RNPerThreadReader>(reader)) {
 			return static_cast<u64>( std::get <
@@ -2243,12 +2253,12 @@ public:
 	void Setup() { SetupReader(); SetupWriter(); }
 
 	void Start() noexcept { /* ERROR(...) will call std::abort, so it's sane to mark it noexcept. */
-		if(_running) 
+		if(_running)
 			ERROR("Start called but worker thread is still marked as running? (%s)", _SELF_TYPE_CSTR);
-		if(int v = writer.GetValidity(); v != 0) 
-			ERROR("Calling start but writer handle isn't valid (v != 0). v = 0x%02x. Check API for GetValidity().", v); 
+		if(int v = writer.GetValidity(); v != 0)
+			ERROR("Calling start but writer handle isn't valid (v != 0). v = 0x%02x. Check API for GetValidity().", v);
 		if(int r = mnd::GetValidity(reader); r != 0)
-			ERROR("Calling start but reader handle isn't valid (r != 0). r = 0x%02x. Check API for mnd::GetValidity().", r); 
+			ERROR("Calling start but reader handle isn't valid (r != 0). r = 0x%02x. Check API for mnd::GetValidity().", r);
 		
 		_running = true;
 		
@@ -2261,7 +2271,7 @@ public:
 							this->GetEntry( static_cast<Long64_t>(evId) );
 							
 							std::apply([](auto&... ps) {
-								(..., ps.ProcessEntry()); 
+								(..., ps.ProcessEntry());
 							}, this->_proc);
 					
 							if(this->_do_write)
@@ -2282,7 +2292,7 @@ public:
 						this->GetEntry( static_cast<Long64_t>(evId) );
 						
 						std::apply([](auto&... ps) {
-							(..., ps.ProcessEntry()); 
+							(..., ps.ProcessEntry());
 						}, this->_proc);
 
 						if(this->_do_write)
@@ -2321,7 +2331,7 @@ private:
 	void SetupWriter() {
 		if(info.out.fname.empty() || info.out.out_rnname.empty())
 			ERROR("Cannot proceed with setting up the writer if output (file,rnname) string information isn't given. (%s)", _SELF_TYPE_CSTR);
-		if(writer.ctx || writer.entry) 
+		if(writer.ctx || writer.entry)
 			ERROR("RNTupleWriter, context or entry already given (non-null)? (%s)", _SELF_TYPE_CSTR);
 
 		RExp2::RNTupleParallelWriter* pwriter_raw;
@@ -2330,7 +2340,7 @@ private:
 		if(mnd::IsEmpty(writer.pwriter)) {
 			auto model = RExp::RNTupleModel::CreateBare();
 			
-			mnd::for_each_in_tuple(this->_proc, [this, &model](auto& p /* TProcessor<Out(In...)>) */ ) 
+			mnd::for_each_in_tuple(this->_proc, [this, &model](auto& p /* TProcessor<Out(In...)>) */ )
 				{
 					const char* name = p.out.GetName();
 					if(strlen(name) == 0) ERROR("Setting up the writer but an output container is unnamed. (%s)", _SELF_TYPE_CSTR);
@@ -2355,7 +2365,7 @@ private:
 		writer.ctx = pwriter_raw->CreateFillContext();
 		writer.entry = writer.ctx->CreateEntry();
 
-		mnd::for_each_in_tuple(this->_proc, [this](auto& p /* TProcessor<Out(In...)>) */ ) 
+		mnd::for_each_in_tuple(this->_proc, [this](auto& p /* TProcessor<Out(In...)>) */ )
 			{
 				p.out._inner = this->writer.entry
 					->template GetPtr< typename decltype(p.out)::inner_type >( p.out.GetName() );
@@ -2368,7 +2378,7 @@ private:
 			ERROR("Info given, but input file name empty. (%s)", _SELF_TYPE_CSTR);
 
 		/* Reader object must be in the empty state. */
-		if(! mnd::IsEmpty(reader)) 
+		if(! mnd::IsEmpty(reader))
 			ERROR("Trying to setup a fresh reader, but the object is already created with index: %zu. "
 				"1 => RNReader; 2 => TTreeReader. (%s)", reader.index(), _SELF_TYPE_CSTR);
 		
@@ -2392,7 +2402,7 @@ private:
 		}
 
 		if(obj_name.empty())
-			ERROR("File %s opened fine, but cannot find a 'ROOT::RNTuple' or 'TTree' object inside? (%s)", 
+			ERROR("File %s opened fine, but cannot find a 'ROOT::RNTuple' or 'TTree' object inside? (%s)",
 				info.in.fname.c_str(), _SELF_TYPE_CSTR);
 		
 		_file.reset(nullptr);
@@ -2457,8 +2467,8 @@ private:
 
 			
 			 /* TTree API: once we map a branch via `tree->SetBranchAddress(name, &ptr)`, then we can retrieve the pointer's
-			 * address via: tree->GetBranch(name)->GetAddress() . The return type is `char**`. 
-			 * Type safety isn't checked at runtime. Basically the other argument is `void**`somewhere down the line. 
+			 * address via: tree->GetBranch(name)->GetAddress() . The return type is `char**`.
+			 * Type safety isn't checked at runtime. Basically the other argument is `void**`somewhere down the line.
 			 * Checking the type does indeed work, if the underlying type isn't templated.
 			 * It *should* demangle correctly. C++ ABI can change, but it must reflect the same in Cling! */
 
@@ -2493,11 +2503,11 @@ private:
 											b->GetName(), b_type, c_type.c_str(), _SELF_TYPE_CSTR);
 									
 									cont._inner = reinterpret_cast<T*>( *(void**)b->GetAddress() );
-								} 
+								}
 								else { // Branch isn't mapped yet. Map it now.
 									/* Important to set to null. Else ROOT will not do anything, as it already
 									 * dereferences to a valid T. 🤷 */
-									cont._inner = nullptr; 
+									cont._inner = nullptr;
 									
 									(void)TClass::GetClass(c_type.c_str());
 									
@@ -2522,7 +2532,7 @@ private:
 	> void LoadTOnceInputs(const T& cont) {
 		const char* fname = info.in.fname.c_str();
 		auto f = std::make_unique<TFile>(fname, "READ");
-		if(!f)            ERROR("Bad input file handle: %s", fname); 
+		if(!f)            ERROR("Bad input file handle: %s", fname);
 		if(f->IsZombie()) ERROR("Input file %s can be read, but is zombied. You sure path is correct? Or is it open somewhere else, or the disk is misbehaving?", fname);
 		if(!f->IsOpen())  ERROR("Input file %s can be read, but isn't opened. Is it used somewhere else?", fname);
 
@@ -2533,7 +2543,7 @@ private:
 		}
 
 		 /* When the clones are created, they will just share the pointer to these objects.
-		 * Namely, each thread has a view over the object to conserve memory. 
+		 * Namely, each thread has a view over the object to conserve memory.
 		 * These objects aren't really flagged as const, and users should abhold this 'contract' */
 
 		/* It does re-open a ROOT file, but this is done on order of ~10 times, which is insignificant overhead
@@ -2549,7 +2559,7 @@ private:
 
 }; // TAnalysisProcess
 
-/* Number of available threads via nproc. Optionally taken from `common.mk` 
+/* Number of available threads via nproc. Optionally taken from `common.mk`
  * This directive just warns that capacity is over-the top.
  * No point raising a compilation error, since binaries could be just moved
  * or executed from another machine. */
@@ -2565,12 +2575,12 @@ template <
 		"put first integer template parameter to 1.");
 	static_assert(!(N & (N-1)), "TAnalysisProcess template parameter [1] (N-processes) must be a power of two.");
 
-	/* Only allowed ctor. */ 
-	explicit TAnalysisPool(TAnalysisProcess<Processors...>& base, u32 _NSlice) : 
-		pool{}, NSlice(_NSlice) 
+	/* Only allowed ctor. */
+	explicit TAnalysisPool(TAnalysisProcess<Processors...>& base, u32 _NSlice) :
+		pool{}, NSlice(_NSlice)
 	{
-		if(N > POOL_MAX_THREADS_) 
-			WARN("TAnalysisProcess template instantiated with capacity %d, which is over-the-top capacity %d. " 
+		if(N > POOL_MAX_THREADS_)
+			WARN("TAnalysisProcess template instantiated with capacity %d, which is over-the-top capacity %d. "
 				"Is fine if was compiled on machine X and running on machine Y.", N, POOL_MAX_THREADS_);
 		assert((NSlice > 63) &&  "TAnalysisProcess constructor parameter [2] (slice size) must be bigger than 63 to be efficient.");
 		
@@ -2600,9 +2610,9 @@ template <
 	~TAnalysisPool() { Collect(); Write(); mnd::g_loaded_containers.clear(); }
 
 	/**
-	 * Perform the dyadic fold of the Output containers, of each full process. 
+	 * Perform the dyadic fold of the Output containers, of each full process.
 	 * Process indexed with [0] contains the complete fold. Others are half-folded,
-	 * and shouldn't be used any more. Idempotent function. 
+	 * and shouldn't be used any more. Idempotent function.
 	 */
 	void Collect() {
 		if(_is_collected) return;
@@ -2622,7 +2632,7 @@ template <
 	}
 	
 	/**
-	 * Write the collected single- wise objects into the output TFile. Idempotent function. 
+	 * Write the collected single- wise objects into the output TFile. Idempotent function.
 	 */
 	void Write() {
 		if( _is_written) return;
@@ -2633,15 +2643,15 @@ template <
 		
 		/* First write the RNTuple. Gotta loop over all workers to close their
 		 * RNTupleFillContext handles, only then destruct the RNTupleParallelWriter. */
-		for(auto it = std::rbegin(pool); it != std::rend(pool); ++it) 
+		for(auto it = std::rbegin(pool); it != std::rend(pool); ++it)
 			it->writer.Reset();
 
 		std::unique_ptr<TFile> f = std::make_unique<TFile>( info.out.fname.c_str(), "UPDATE");
-		if(!f) 
+		if(!f)
 			ERROR("Cannot open output file at end to write the single- wise objects. %s", info.out.fname.c_str());
-		if(f->IsZombie()) 
+		if(f->IsZombie())
 			ERROR("Opened output file at end to write the single- wise objects is zombied?. %s", info.out.fname.c_str());
-		if(!f->IsOpen()) 
+		if(!f->IsOpen())
 			ERROR("Opened output file at end to write the single- wise objects, but is not `IsOpen()` %s", info.out.fname.c_str());
 		if(!f->IsWritable())
 			ERROR("Opened output file at end to write the single- wise objects, but is not writable? %s", info.out.fname.c_str());
@@ -2661,7 +2671,7 @@ template <
 	}
 
 	/**
-	 * Send a batch of identical `NBatch` number of first entries 
+	 * Send a batch of identical `NBatch` number of first entries
 	 * to each of the threads, to set up some initial parameters.
 	 */
 	void SendOneBatch(u64 startingIndex = 0, u32 NBatch = 0) {
@@ -2691,12 +2701,12 @@ template <
 		}
 
 		Stop(); /* This blocks until all the threads are joined. */
-		for(auto& w : pool) 
+		for(auto& w : pool)
 			w._do_write = true;
 	}
 
 	void Start (
-#ifdef __HAS_INDICATORS 
+#ifdef __HAS_INDICATORS
 		indicators::ProgressBar& bar,
 #endif
 		const u64 max_entries = static_cast<u64>(-1)
@@ -2707,7 +2717,7 @@ template <
 			ref_process.GetEntries(),
 			max_entries
 		);
-		WARN("Starting the analysis with " EMPH1(%lu) 
+		WARN("Starting the analysis with " EMPH1(%lu)
 			" entries, split over " EMPH1(%u) " workers.\n", nentries, N);
 
 		ROOT::EnableThreadSafety();
@@ -2724,7 +2734,7 @@ template <
 				.last  = std::min(i + NSlice, nentries) // Excluded.
 			};
 
-			/* Choose a process thread; round-robin. 
+			/* Choose a process thread; round-robin.
 			 * If currently selected thread has capped queue, do a short spin and try next one. */
 			for(; w = &pool[next], !w->q.push(j); ++next, next %= N) {
 #ifdef __HAS_SMALL_INTEL_SPIN
@@ -2748,7 +2758,7 @@ template <
 	} // void Start(...)
 
 	void Stop() {
-		for(auto& w : pool) w.Stop(); 
+		for(auto& w : pool) w.Stop();
 	}
 	
 	decltype(auto) GetPool()       noexcept { return ( this->pool ); }
@@ -2793,8 +2803,8 @@ private:
 
 template<typename... Processors>
 struct TAnalysisPool<1, Processors...> final {
-	explicit TAnalysisPool(TAnalysisProcess<Processors...>& base, u32 _NSlice) : 
-		pool{}, NSlice(_NSlice) 
+	explicit TAnalysisPool(TAnalysisProcess<Processors...>& base, u32 _NSlice) :
+		pool{}, NSlice(_NSlice)
 	{
 		pool[0] = std::move(base);
 		pool[0].Setup();
@@ -2806,7 +2816,7 @@ struct TAnalysisPool<1, Processors...> final {
 	void Collect() {}
 
 	/**
-	 * Write the collected single- wise objects into the output TFile. Idempotent function. 
+	 * Write the collected single- wise objects into the output TFile. Idempotent function.
 	 */
 	void Write() {
 		if( _is_written) return;
@@ -2819,9 +2829,9 @@ struct TAnalysisPool<1, Processors...> final {
 		process.writer.Reset();	
 
 		std::unique_ptr<TFile> f = std::make_unique<TFile>( info.out.fname.c_str(), "UPDATE");
-		if(!f || f->IsZombie()) 
+		if(!f || f->IsZombie())
 			ERROR("Cannot open output file at end to write the single- wise objects. %s", info.out.fname.c_str());
-		if(!f->IsOpen()) 
+		if(!f->IsOpen())
 			ERROR("Opened output file at end to write the single- wise objects, but is not `IsOpen()` %s", info.out.fname.c_str());
 		if(!f->IsWritable())
 			ERROR("Opened output file at end to write the single- wise objects, but is not writable %s", info.out.fname.c_str());
@@ -2841,7 +2851,7 @@ struct TAnalysisPool<1, Processors...> final {
 	}
 	
 	/**
-	 * Send a batch of identical `NBatch` number of first entries 
+	 * Send a batch of identical `NBatch` number of first entries
 	 * to the underlying process, to set up some initial parameters.
 	 */
 	void SendOneBatch(u64 startingIndex = 0, u32 NBatch = 0) {
@@ -2856,7 +2866,7 @@ struct TAnalysisPool<1, Processors...> final {
 			process.GetEntry( static_cast<Long64_t>(evId) );
 
 			std::apply([](auto&... ps) {
-					(..., ps.ProcessEntry()); 
+					(..., ps.ProcessEntry());
 				}, process._proc
 			);
 			/* Don't fill. */
@@ -2866,7 +2876,7 @@ struct TAnalysisPool<1, Processors...> final {
 	/* In singlethreaded case, don't poke the underlying std::thread of the process,
 	 * just call ProcessEntry() directly. */
 	void Start (
-#ifdef __HAS_INDICATORS 
+#ifdef __HAS_INDICATORS
 		indicators::ProgressBar& bar,
 #endif
 		const u64 max_entries = static_cast<u64>(-1)
@@ -2879,7 +2889,7 @@ struct TAnalysisPool<1, Processors...> final {
 		);
 
 		WARN("Starting the singlethreaded analysis with " EMPH1(%lu) " entries.\n", nentries);
-		u64 n_print_every = ((NSlice > 0) ? NSlice : 512); 
+		u64 n_print_every = ((NSlice > 0) ? NSlice : 512);
 		for(u64 evId = 0; evId < nentries; ++evId) {
 			process.GetEntry( static_cast<Long64_t>(evId) );
 
@@ -2887,7 +2897,7 @@ struct TAnalysisPool<1, Processors...> final {
 			mnd::PrintProgress(bar, evId, nentries, n_print_every, mnd::_dyn::dancer, 0.5);
 #endif
 			std::apply([](auto&... ps) {
-					(..., ps.ProcessEntry()); 
+					(..., ps.ProcessEntry());
 				}, process._proc
 			);
 			process.writer.ctx->Fill( *process.writer.entry );
