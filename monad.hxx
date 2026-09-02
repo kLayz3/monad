@@ -60,7 +60,7 @@
 #endif
 
 #if __has_include(<immintrin.h>)
-#   define __HAS_SMALL_INTEL_SPIN
+#   define MND_HAS_INTEL_INTRIN
 #	include <immintrin.h>
 #endif
 
@@ -645,6 +645,20 @@ void for_each_in_tuple(Tuple&& t, Callable&& f) {
 template<typename>
 inline constexpr bool always_false_v = false;
 
+#if __cplusplus >= 202002L /* Mirrors std:: terminology */
+template<typename T>
+using remove_cvref = std::remove_cvref<T>;
+template<typename T>
+using remove_cvref_t = std::remove_cvref_t<T>;
+#else
+template<typename T>
+struct remove_cvref {
+	using type = std::remove_cv_t<std::remove_reference_t<T>>;
+};
+template<typename T>
+using remove_cvref_t = typename remove_cvref<T>::type;
+#endif
+
 template<typename T>
 struct is_an_array : std::false_type {};
 template<typename T, size_t N>
@@ -832,7 +846,7 @@ struct _is_base_of_template_impl {
 };
 
 template< template<typename...> typename Base, typename Derived,
-	typename Bare = std::remove_reference_t<std::remove_cv_t<Derived>>>
+	typename Bare = remove_cvref_t<Derived>>
 using is_base_of_template = typename _is_base_of_template_impl<Base, Bare>::type;
 
 template<typename Tuple, std::size_t... Is>
@@ -909,13 +923,13 @@ template<typename T,
 }
 
 template<typename T,
-	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
+	typename U = remove_cvref_t<T>,
 	std::size_t N = is_an_array<U>::size,
 	char(*)[N % 2] = nullptr
 > auto median(const T& sorted_arr) noexcept { return sorted_arr[N/2]; }
 
 template<typename T,
-	typename U = std::remove_cv_t<std::remove_reference_t<T>>,
+	typename U = remove_cvref_t<T>,
 	std::size_t N = is_an_array<U>::size,
 	char(*)[!(N % 2)] = nullptr
 > auto median(const T& sorted_arr) noexcept { return ( sorted_arr[N/2] + sorted_arr[N/2 - 1] ) / 2; }
@@ -949,7 +963,7 @@ constexpr auto max(T t, Ts... ts) noexcept {
 	return r;
 }
 template<typename T,
-	typename U = std::remove_cv_t<std::remove_reference_t<T>>
+	typename U = remove_cvref_t<T>
 > constexpr int FindIndex(const T& arr, const typename is_an_array<U>::underlying_type& val) noexcept {
 	static_assert(is_an_array_v<U>, "Type T must be a C-style array or \'std::array<T,N>\'");
 	constexpr std::size_t N = is_an_array<U>::size;
@@ -958,14 +972,14 @@ template<typename T,
 	return -1;
 }
 template<typename T,
-	typename U = std::remove_cv_t<std::remove_reference_t<T>>
+	typename U = remove_cvref_t<T>
 > constexpr int len(const T& arr) noexcept {
 	static_assert(is_an_array_v<U>, "Passed type must either be an array reference `T (&)[N]` or `std::array<T,N>&` .");
 	(void)arr;
 	return static_cast<int>(is_an_array<U>::size);	
 }
 template<typename T,
-	typename U = std::remove_cv_t<std::remove_reference_t<T>>
+	typename U = remove_cvref_t<T>
 > constexpr int len() noexcept {
 	static_assert(is_an_array_v<U>, "Passed type must either be an array reference `T (&)[N]` or `std::array<T,N>&` .");
 	return static_cast<int>(is_an_array<U>::size);	
@@ -1055,11 +1069,11 @@ template <
 		std::forward<Arr>(arr),
 		std::forward<Callable>(f),
 		std::make_index_sequence <
-			mnd::len<std::remove_cv_t<std::remove_reference_t<Arr>>>()
+			mnd::len<remove_cvref_t<Arr>>()
 		>{}
 	)))
 {
-	using Bare = std::remove_cv_t<std::remove_reference_t<Arr>>;
+	using Bare = remove_cvref_t<Arr>;
 	constexpr std::size_t N = mnd::len<Bare>();
 	_static_for_each_impl(std::forward<Arr>(arr), std::forward<Callable>(f),
 		std::make_index_sequence<N>{});
@@ -1071,7 +1085,7 @@ template <
 	typename ResultType = void, // If left unspecified, result type is the underlying type of the array. */
 	// .. all types below this line deduced :-)
 	typename Arr,
-	typename T = typename is_an_array<std::remove_cv_t<std::remove_reference_t<Arr>>>::underlying_type,
+	typename T = typename is_an_array<remove_cvref_t<Arr>>::underlying_type,
 	typename R = std::conditional_t<std::is_void_v<ResultType>, T, ResultType>
 > constexpr R sum(const Arr& arr) noexcept {
 	static_assert(has_add_binary_op<R>::value, "Underlying type must have binary addition operator well defined.");
@@ -1121,7 +1135,7 @@ struct MeanVar {
 template <
 	Unroll U = Unroll::No,
 	typename Arr,
-	typename T = typename is_an_array<std::remove_cv_t<std::remove_reference_t<Arr>>>::underlying_type
+	typename T = typename is_an_array<remove_cvref_t<Arr>>::underlying_type
 > constexpr MeanVar mean_var(const Arr& arr) noexcept {
 	static_assert(std::is_convertible<T, double>::value, "Underlying type must be convertable to double.");
 
@@ -1148,7 +1162,7 @@ template <
 /* SFINAE'd away for arrays. Previous overload wins. */
 template <
 	typename Range,
-	typename Bare = std::remove_cv_t<std::remove_reference_t<Range>>,
+	typename Bare = remove_cvref_t<Range>,
 	typename = typename std::enable_if_t<!is_an_array<Bare>::value>
 > MeanVar mean_var(const Range& r) {
 	static_assert(mnd::is_range<Range>::value,
@@ -1215,7 +1229,7 @@ template<typename T,
 }
 
 #define _SELF_TYPE_CSTR \
-	mnd::type_name<typename std::remove_reference<decltype(*this)>::type>().c_str()
+	::mnd::type_name<typename ::mnd::remove_cvref<decltype(*this)>::type>().c_str()
 
 /* Sometimes cursor can be hidden mid execution,
  * if the program dies due to a system signal,
@@ -2281,7 +2295,7 @@ public:
 								this->writer.ctx->Fill(*this->writer.entry);
 						}
 					} else {
-#ifdef __HAS_SMALL_INTEL_SPIN
+#ifdef MND_HAS_INTEL_INTRIN
 						_mm_pause(); /* Short pause, 100-150 clock cycles. */
 #else
 						{}           /* Do nothing; don't yield or reschedule. */
@@ -2740,7 +2754,7 @@ template <
 			/* Choose a process thread; round-robin.
 			 * If currently selected thread has capped queue, do a short spin and try next one. */
 			for(; w = &pool[next], !w->q.push(j); ++next, next %= N) {
-#ifdef __HAS_SMALL_INTEL_SPIN
+#ifdef MND_HAS_INTEL_INTRIN
 				_mm_pause(); /* Short pause, 100-150 clock cycles. */
 #else
 				{}           /* Do nothing; don't yield or reschedule - this is ~100 us latency. */
