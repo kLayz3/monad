@@ -237,6 +237,9 @@ inline void safe_write(int fd, const char* s, size_t n) noexcept {
 	ssize_t r = ::write(fd, s, n);
 	(void)r; // ignored; to shutup GCC's ‘warn_unused_result’ [-Wunused-result]
 }
+
+inline std::thread::id main_thread_id = std::this_thread::get_id();
+
 } // namespace mnd
 
 #define YELL(...) \
@@ -646,18 +649,45 @@ template<typename>
 inline constexpr bool always_false_v = false;
 
 #if __cplusplus >= 202002L /* Mirrors std:: terminology */
+
 template<typename T>
 using remove_cvref = std::remove_cvref<T>;
 template<typename T>
 using remove_cvref_t = std::remove_cvref_t<T>;
+using jthread = std::jthread;
+
 #else
+
+class jthread {
+public:
+	template<typename F, typename... Args>
+	explicit jthread(F&& f, Args&&... args)
+		: t_(std::forward<F>(f), std::forward<Args>(args)...)
+		{}
+
+	~jthread() {
+		if(t_.joinable())
+			t_.join();
+	}
+
+	jthread(jthread&&) noexcept = default;
+	jthread& operator=(jthread&&) noexcept = default;
+
+	jthread(const jthread&) = delete;
+	jthread& operator=(const jthread&) = delete;
+
+private:
+	std::thread t_;
+};
+
 template<typename T>
 struct remove_cvref {
 	using type = std::remove_cv_t<std::remove_reference_t<T>>;
 };
 template<typename T>
 using remove_cvref_t = typename remove_cvref<T>::type;
-#endif
+
+#endif // __cplusplus >= 202002L
 
 template<typename T>
 struct is_an_array : std::false_type {};
