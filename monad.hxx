@@ -389,60 +389,66 @@ span<const T> as_span(const std::array<T, N>& a) noexcept {
 }
 
 #if defined(__HAS_INDICATORS)
+struct ProgressBarState {
+	constexpr static u64 DEFAULT_STEP = 250;
+	constexpr static double DEFAULT_UNPDATE_FREQ = 0.5;
+
+	u64               current_dynamic_frame_i = 0;
+	std::string_view  current_dynamic_frame_v = "";
+	std::chrono::steady_clock::time_point current_dynamic_frame_t = {};
+};
+inline static ProgressBarState g_progress_state {};
+
 inline void PrintProgress (
 	indicators::ProgressBar& bar,
+	ProgressBarState& state,
 	const u64 n_entry,
 	const u64 max_entries,
-	const u64 step = 250,
+	const u64 step = ProgressBarState::DEFAULT_STEP,
 	span<std::string_view const> dynamic_frames = {},
-	double dynamic_update_freq = 0.5 /* seconds */
+	double dynamic_update_freq = ProgressBarState::DEFAULT_UNPDATE_FREQ /* seconds */
 ) {
 	using namespace indicators;
 	using clock = std::chrono::steady_clock;
 	using ms = std::chrono::milliseconds;
 	
-	static u64 n_entry_called = 0;
-	static u64               current_dynamic_frame_i = 0;
-	static std::string_view  current_dynamic_frame_v = "";
-	static clock::time_point current_dynamic_frame_t = {};
+	if(max_entries == 0)
+		return;
 
-	if(n_entry >= n_entry_called and
-	   n_entry - n_entry_called < step) return;
+	if(n_entry % step == 0) {
+		bar.set_progress(std::min<u64>( (n_entry*100) / max_entries, 100 )) ;
+	}
 
 	const auto now = clock::now();
 
 	if(!dynamic_frames.empty() and
-		std::chrono::duration_cast<ms>(now - current_dynamic_frame_t).count()
+		std::chrono::duration_cast<ms>(now - state.current_dynamic_frame_t).count()
 			> 1000*dynamic_update_freq )
 	{
 		const size_t nframes = dynamic_frames.size();
 		std::string postfix = bar.get_postfix_text_only();
-		if( !current_dynamic_frame_v.empty() and
-			postfix.size() >= current_dynamic_frame_v.size() and
+		if( !state.current_dynamic_frame_v.empty() and
+			postfix.size() >= state.current_dynamic_frame_v.size() and
 			postfix.compare (
-				postfix.size() - current_dynamic_frame_v.size(),
-				current_dynamic_frame_v.size(),
-				current_dynamic_frame_v.data(),
-				current_dynamic_frame_v.size()
+				postfix.size() - state.current_dynamic_frame_v.size(),
+				state.current_dynamic_frame_v.size(),
+				state.current_dynamic_frame_v.data(),
+				state.current_dynamic_frame_v.size()
 			) == 0
 		) { // Remove the previous frame only if it is actually the suffix (of the postfix).
 			postfix.resize (
-				postfix.size() - current_dynamic_frame_v.size()
+				postfix.size() - state.current_dynamic_frame_v.size()
             );
 		}
-		current_dynamic_frame_i++;
-		current_dynamic_frame_t = now;
-		current_dynamic_frame_v = dynamic_frames.data()[ current_dynamic_frame_i % nframes ];
+		state.current_dynamic_frame_i++;
+		state.current_dynamic_frame_t = now;
+		state.current_dynamic_frame_v = dynamic_frames.data()[ state.current_dynamic_frame_i % nframes ];
 
-		postfix += current_dynamic_frame_v;
+		postfix += state.current_dynamic_frame_v;
 		bar.set_option(option::PostfixText{std::move(postfix)});
 	}
-
-	// No check for max_entries == 0. Sanity checks must be upfront.
-	bar.set_progress(std::min<u64>( (n_entry*100) / max_entries, 100 )) ;
-
-	n_entry_called = n_entry;
 }
+
 namespace _dyn {
 inline constexpr auto dancer = std::array {
 	std::string_view{" ┏(-_-)┛"},
@@ -450,8 +456,28 @@ inline constexpr auto dancer = std::array {
 	std::string_view{" ┗(^_^)┛"},
 	std::string_view{" ┏(^_^)┓"}
 };
+} // namespace _dyn
+
+/* In case, it is for sure single-threaded, can alleviate some boilerplate. */
+inline void PrintProgressSt(
+	indicators::ProgressBar& bar,
+	const u64 n_entry,
+	const u64 max_entries,
+	const u64 step = ProgressBarState::DEFAULT_STEP,
+	span<std::string_view const> dynamic_frames = _dyn::dancer,
+	double dynamic_update_freq = ProgressBarState::DEFAULT_UNPDATE_FREQ /* seconds */
+) {
+	return PrintProgress(
+		bar,
+		g_progress_state,
+		n_entry,
+		max_entries,
+		step,
+		dynamic_frames,
+		dynamic_update_freq
+	);
 }
-#endif
+#endif // __HAS_INDICATORS
 
 template<typename T> 
 void QuickSwap(std::vector<T>& v, int i, int j) noexcept {
@@ -648,7 +674,7 @@ void for_each_in_tuple(Tuple&& t, Callable&& f) {
 template<typename>
 inline constexpr bool always_false_v = false;
 
-#if __cplusplus >= 202002L /* Mirrors std:: terminology */
+#if __cplusplus >= 202002L /* Mirrors STL-terminology */
 
 template<typename T>
 using remove_cvref = std::remove_cvref<T>;
@@ -2767,6 +2793,9 @@ template <
 		WARN("Starting the analysis with " EMPH1(%lu)
 			" entries, split over " EMPH1(%u) " workers.\n", nentries, N);
 
+#ifdef __HAS_INDICATORS
+		mnd::ProgressBarState state{};
+#endif
 		ROOT::EnableThreadSafety();
 		for(auto& w : pool)
 			w.Start();
@@ -2791,7 +2820,7 @@ template <
 #endif
 			}
 #ifdef __HAS_INDICATORS
-			mnd::PrintProgress(bar, j.last, nentries, NSlice-1, mnd::_dyn::dancer, 0.5);
+			mnd::PrintProgress(bar, state, j.last, nentries, NSlice-1, mnd::_dyn::dancer, 0.5);
 #endif
 		}
 
@@ -2937,11 +2966,15 @@ struct TAnalysisPool<1, Processors...> final {
 
 		WARN("Starting the singlethreaded analysis with " EMPH1(%lu) " entries.\n", nentries);
 		u64 n_print_every = ((NSlice > 0) ? NSlice : 512);
+#ifdef __HAS_INDICATORS
+		mnd::ProgressBarState state{};
+#endif
+	
 		for(u64 evId = 0; evId < nentries; ++evId) {
 			process.GetEntry( static_cast<Long64_t>(evId) );
 
 #ifdef __HAS_INDICATORS
-			mnd::PrintProgress(bar, evId, nentries, n_print_every, mnd::_dyn::dancer, 0.5);
+			mnd::PrintProgress(bar, state, evId, nentries, n_print_every, mnd::_dyn::dancer, 0.5);
 #endif
 			std::apply([](auto&... ps) {
 					(..., ps.ProcessEntry());
