@@ -186,7 +186,7 @@
 #define KRNM "\e[0m"
 #define KNRM "\e[0m"
 #define COLOR_RESET "\e[0m"
-#define KBLINK  "\e[5m"
+#define KBLINK "\e[5m"
 
 #define BOLD "\e[1m"
 #define EBOLD(x) BOLD #x KNRM
@@ -200,6 +200,18 @@
 	KGRN __FILE_NAME__ KNRM ":" KCYN MND_STRINGIFY(__LINE__) KNRM
 
 #define MND_EMPTY_MACRO(...)
+
+#define MND_RGB_COL(r, g, b) \
+       "\x1b[38;2;" \
+       MND_STRINGIFY(r) ";" \
+       MND_STRINGIFY(g) ";" \
+       MND_STRINGIFY(b) "m"
+
+#define MND_RGB_BCKGRND_COL(r, g, b) \
+       "\x1b[48;2;" \
+       MND_STRINGIFY(r) ";" \
+       MND_STRINGIFY(g) ";" \
+       MND_STRINGIFY(b) "m"
 
 /* Sometimes Makefiles define specific `PROG_PATH` preproc and pass it directly to gcc,
  * but linters can't catch this hehe. Just have it here. */
