@@ -575,8 +575,6 @@ using Empty = std::monostate;
 template<typename T>
 using Maybe = std::optional<T>;
 
-inline constexpr auto None = std::nullopt;
-
 template<typename... Ts>
 using Variant = std::variant<Empty, Ts...>;
 
@@ -1431,7 +1429,7 @@ public:
 		else
 			return f->WriteObject (&_internal, *name ? name : _name.c_str());
 	}
-   
+
 	void* Load(TFile* f, const char* target = "") override {
 		const char* name = *target ? target : _name.c_str();
 		if(!name || ! *name) ERROR("Unnamed TOnce<T> object while trying to load from a file.");
