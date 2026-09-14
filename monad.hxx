@@ -258,7 +258,7 @@ inline std::thread::id main_thread_id = std::this_thread::get_id();
 	do { \
 		fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
 		fprintf(stderr, KBH_RED); fprintf(stderr, __VA_ARGS__); fprintf(stderr, KNRM); \
-	} while(0);
+	} while(0)
 
 #define WARN_ST(...) \
 	WARN(__VA_ARGS__) \
@@ -302,8 +302,10 @@ inline std::thread::id main_thread_id = std::this_thread::get_id();
 
 #define MND_THROW(...) do { \
 	std::string what {}; \
-	what += mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
+	what += mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM \
+		" => " MND_RGB_COL(252,110,242), __FILE_NAME__, __LINE__); \
 	what += mnd::msg(__VA_ARGS__); \
+	what += KNRM; \
 	throw std::runtime_error(what); \
 } while(0)
 
