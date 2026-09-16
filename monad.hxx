@@ -219,6 +219,14 @@
 #define PROG_PATH "mnd_PROG_PATH_not_defined"
 #endif
 
+#if defined(__clang__) || defined(__GNUC__)
+	#define MND_FORCE_INLINE inline __attribute__((always_inline))
+#elif defined(_MSC_VER)
+	#define MND_FORCE_INLINE __forceinline
+#else
+	#define MND_FORCE_INLINE inline
+#endif
+
 /* ROOT-like Form() w/o dependency. */
 namespace mnd {
 inline const char* msg(const char* fmt, ...) {
@@ -619,6 +627,17 @@ void for_each_in_tuple(Tuple&& t, Callable&& f) {
 
 template<typename>
 inline constexpr bool always_false_v = false;
+
+[[noreturn]] MND_FORCE_INLINE
+void unreachable() noexcept {
+#if defined(__clang__) || defined(__GNUC__)
+	__builtin_unreachable();
+#elif defined(_MSC_VER)
+	__assume(0);
+#else
+	std::abort();
+#endif
+}
 
 #if __cplusplus >= 202002L /* Mirrors STL-terminology */
 
