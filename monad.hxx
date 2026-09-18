@@ -508,6 +508,14 @@ bool isfinite(Ts&&... ts) { /* All must pass the predicate. */
 	return (std::isfinite(ts) && ...);
 }
 
+template<typename T>
+constexpr double clamp(const T& value, const std::array<T,2>& bounds) {
+	static_assert(std::is_convertible_v<decltype(std::declval<const T&>() < std::declval<const T&>()), bool>,
+		 "Type T must support comparison operator T < T.");
+	return (value < bounds[0]) ? bounds[0]
+	     : (bounds[1] < value) ? bounds[1]: value;
+}
+
 struct TimePoint {
 	std::chrono::high_resolution_clock::time_point t;
 	std::string tag;
@@ -2782,7 +2790,7 @@ template <
 #endif
 			}
 #ifdef __HAS_INDICATORS
-			mnd::PrintProgress(bar, j.last, nentries, NSlice-1);
+			mnd::PrintProgress(bar, j.last-1, nentries-1, NSlice);
 #endif
 		}
 
@@ -2936,7 +2944,7 @@ struct TAnalysisPool<1, Processors...> final {
 			process.GetEntry( static_cast<Long64_t>(evId) );
 
 #ifdef __HAS_INDICATORS
-			mnd::PrintProgress(bar, evId, nentries, n_print_every);
+			mnd::PrintProgress(bar, evId, nentries-1, n_print_every);
 #endif
 			std::apply([](auto&... ps) {
 					(..., ps.ProcessEntry());
