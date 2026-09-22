@@ -221,10 +221,13 @@
 
 #if defined(__clang__) || defined(__GNUC__)
 	#define MND_FORCE_INLINE inline __attribute__((always_inline))
+	#define MND_NEVER_INLINE __attribute__((noinline))
 #elif defined(_MSC_VER)
 	#define MND_FORCE_INLINE __forceinline
+	#define MND_NEVER_INLINE __declspec(noinline)
 #else
 	#define MND_FORCE_INLINE inline
+	#define MND_NEVER_INLINE
 #endif
 
 /* ROOT-like Form() w/o dependency. */
@@ -258,6 +261,14 @@ inline void safe_write(int fd, const char* s, size_t n) noexcept {
 	(void)r; // ignored; to shutup GCC's ‘warn_unused_result’ [-Wunused-result]
 }
 
+inline std::string stacktrace() {
+#ifdef _HAS_BOOST_INCLUDE
+	return boost::stacktrace::to_string(boost::stacktrace::stacktrace{});
+#else
+	return {};
+#endif
+}
+
 inline std::thread::id main_thread_id = std::this_thread::get_id();
 
 } // namespace mnd
@@ -268,51 +279,37 @@ inline std::thread::id main_thread_id = std::this_thread::get_id();
 		fprintf(stderr, KBH_RED); fprintf(stderr, __VA_ARGS__); fprintf(stderr, KNRM); \
 	} while(0)
 
-#define WARN_ST(...) \
+#define WARN_WITH_STACKTRACE(...) \
 	WARN(__VA_ARGS__) \
 	fputc('\n', stderr); \
-	std::cerr << boost::stacktrace::stacktrace(); \
+	std::cerr << ::mnd::stacktrace(); \
 
 #define WARN(...) \
 	do { \
 		fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
 		fprintf(stderr, __VA_ARGS__); \
-	} while (0);
+	} while (0)
 
 #define WARN_ASYNC(...) \
 	do { \
-		const char* msg_ = mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
-		mnd::safe_write(STDERR_FILENO, msg_, strlen(msg_)); \
-		const char* msg_v_ = mnd::msg(__VA_ARGS__); \
-		mnd::safe_write(STDERR_FILENO, msg_v_, strlen(msg_v_)); \
-	} while (0);
-
-#define println(...) \
-	do { \
-		printf(__VA_ARGS__); \
-		printf("\n"); \
-	} while(0)
-
-#ifdef _HAS_BOOST_INCLUDE
-#	define ERROR(...) do { \
-		YELL(__VA_ARGS__); \
-		fputc('\n', stderr); \
-		std::cerr << boost::stacktrace::stacktrace(); \
-		std::abort(); \
+		const char* msg_ = ::mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
+		::mnd::safe_write(STDERR_FILENO, msg_, strlen(msg_)); \
+		const char* msg_v_ = ::mnd::msg(__VA_ARGS__); \
+		::mnd::safe_write(STDERR_FILENO, msg_v_, strlen(msg_v_)); \
 	} while (0)
-#else
-#	define ERROR(...) do { \
-		YELL(__VA_ARGS__); \
-		fputc('\n', stderr); \
-		std::abort(); \
-	} while (0)
-#endif
+
+#define ERROR(...) do { \
+	YELL(__VA_ARGS__); \
+	fputc('\n', stderr); \
+	std::cerr << ::mnd::stacktrace(); \
+	std::abort(); \
+} while (0)
 
 #define MND_THROW(...) do { \
-	std::string what {}; \
-	what += mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM \
+	auto what = std::string{'\n'} + ::mnd::stacktrace(); \
+	what += ::mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM \
 		" => " MND_RGB_COL(252,110,242), __FILE_NAME__, __LINE__); \
-	what += mnd::msg(__VA_ARGS__); \
+	what += ::mnd::msg(__VA_ARGS__); \
 	what += KNRM; \
 	throw std::runtime_error(what); \
 } while(0)
@@ -326,7 +323,7 @@ inline std::thread::id main_thread_id = std::this_thread::get_id();
 					<< "\nFile: " << __FILE__  \
 					<< ":" << __LINE__ \
 					<< "\n\nStacktrace:\n" \
-					<< boost::stacktrace::stacktrace() \
+					<< ::mnd::stacktrace() \
 					<< std::endl; \
 				std::abort(); \
 			} \
@@ -1231,11 +1228,20 @@ constexpr std::array<T, N> make_filled_array(T value) {
 	return _make_filled_array_impl<T>(value, std::make_index_sequence<N>{});
 }
 
+template<typename T,
+	typename = std::void_t<
+		decltype(std::declval<std::ostream&>() << std::declval<const T&>())
+>> std::string streamable(const T& obj) {
+	std::ostringstream os;
+	os << obj;
+	return os.str();
+}
+
 /* Returns the name of the type passed, also adding
  * ref-cv qualifiers. Demangles templated types, too :-) */
 template<typename T,
 	typename U = std::decay_t<T>	
-> std::string type_name() {
+> MND_NEVER_INLINE std::string type_name() {
 	std::unique_ptr<char, void(*)(void*)> own(
 #ifndef _MSC_VER
 		abi::__cxa_demangle(typeid(U).name(), nullptr,
@@ -1952,6 +1958,8 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 			lvc[i]->Collect( *rvc[i] );
 	}
 
+	using out_type = Out;
+	using in_type  = std::tuple<Ins...>;
 }; // TProcessor
 
 template<u32, typename...> struct TAnalysisPool;
@@ -2057,17 +2065,50 @@ struct PerThreadWriter {
 };
 
 inline std::unordered_set<std::string> g_loaded_containers {};
-namespace _private { inline std::string g_input_file {}; }
 
-inline void set_current_input_file(const std::string_view s) {
-    _private::g_input_file = s;
-}
-inline std::string const& get_current_input_file() noexcept {
-    return _private::g_input_file;
-}
+struct InputFileInfo_ {
+private:
+	std::string full_path_;
+	size_t filename_offset_ = 0;
+
+public:
+	/* It's possible that the input file got passed relatively, or thru a symlink.
+	 * Resolve them both here, and also do some sanity checks around this file. */
+	void set(std::string_view s) {
+		std::error_code ec;
+		auto resolved = std::filesystem::canonical(s, ec);
+		if(ec) { // Failed: ec.message() describes the error.
+			MND_THROW("Bad input file handle '%.*s', reason: %s",
+				(int)s.size(), s.empty()? "": s.data(), ec.message().c_str());
+		}
+		if( !std::filesystem::is_regular_file(resolved, ec) ) {
+			if(ec) {
+				MND_THROW("Cannot inspect '%s', reason: %s",
+					resolved.string().c_str(), ec.message().c_str());
+			}
+			MND_THROW("Input path '%s' is not a regular file?",
+				resolved.string().c_str());
+		}
+
+		const size_t filename_size = resolved.filename().string().size();
+		auto full = resolved.string();
+
+		this->filename_offset_ = full.size() - filename_size;
+		this->full_path_ = std::move(full);
+	}
+
+	const std::string& full_path() const noexcept {
+		return full_path_;
+	}
+
+	std::string_view name() const noexcept {
+		return std::string_view{full_path_}.substr(filename_offset_);
+	}
+
+};
+inline InputFileInfo_ g_input_file;
 
 } // namespace mnd
-
 
 /**
  * Represents the full analysis process, where an input entry
@@ -2129,7 +2170,7 @@ public:
             info.in.fname  = std::move(file_in);
             info.out.fname = std::move(file_out);
             info.out.out_rnname = std::move(rn_out);
-            mnd::set_current_input_file( info.in.fname );
+            mnd::g_input_file.set( info.in.fname );
 		}
 	
 	explicit TAnalysisProcess(

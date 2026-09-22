@@ -26,4 +26,5 @@ endif
 
 MONAD_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 MND_INCLUDE_DIR := $(MONAD_DIR)indicators/include
+
 CXXFLAGS += -I$(MND_INCLUDE_DIR)
