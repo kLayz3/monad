@@ -188,7 +188,10 @@ For the same hypothetical example above, we would do the following:
 **[1]** Define your own processor type by wrapping together the
 MONAD base procesor, one output, and one or more input types. Declare
 the two constructors and a `void ProcessEntry() noexcept` method.
-This method will be the entry point to the data mapping, and will be invoked per-entry. 
+This method will be the entry point to the data mapping, and will be invoked per-entry.
+You can also optionally override the `void FinalInit()` method, which is the final initialization
+call just before the main eventloop starts. The use-case for that is if any of the types require
+a consistent self-referent member, it can be safely bound in this call.
 
 In file `sciproc.h`:
 ```cpp

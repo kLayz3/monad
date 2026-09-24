@@ -1307,7 +1307,8 @@ struct TOnceBase {
 	virtual Int_t Write(TFile* file = nullptr, const char* target = "") = 0;
 	virtual void* Load(TFile* file, const char* target = "") = 0;
 	virtual void Collect(const TOnceBase& ) = 0;
-	virtual	std::unique_ptr<TOnceBase> Clone() const = 0;
+	virtual void CopyFrom(const TOnceBase& ) = 0;
+	virtual std::unique_ptr<TOnceBase> Clone() const = 0;
 
 	inline virtual void SetName(std::string name, const char* title = "") {
 		(void)title;
@@ -1537,13 +1538,33 @@ public:
 		copy->_collector = this->_collector;
 		return copy;
 	}
+	/* Copy only the payload; retain the destination's address and name and collector.
+	 * The wrapped types must match exactly. */
+	void CopyFrom(const TOnceBase& rhs) override final {
+		const auto* cvt = dynamic_cast<const TOnce<T>*>(&rhs);
+		if(!cvt) { /* Issue an error. Reason is simple: caller checks if two bases got matching names.
+		            * If yes, hard assert their types. Top level callers can decide on different naming then. */
+			ERROR("Type: '%s', wrapped type: '%s'. TOnce object name '%s'. TOnce<T>::In CopyFrom(..) - dynamic cast failed. "
+				"RHS is named '%s'. Underlying types mismatched!", _SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
+				this->GetName(), rhs.GetName());
+		}
+
+		if(cvt == this)
+			return;
+
+		_internal = cvt->_internal;
+		_collector = cvt->_collector;
+
+		if constexpr(std::is_base_of_v<TH1, T>)
+			_internal.SetDirectory(nullptr);
+	}
 
 	void Collect(const TOnceBase& rhs) override {
 		const TOnce<T>* cvt = dynamic_cast<const TOnce<T>*> (&rhs);
 
 		if( !cvt)
-			ERROR("Type: %s, wrapped type: %s. TOnce object name \'%s\'. In Collect(..) - dynamic cast failed. "
-				"RHS is named \'%s\'", _SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
+			ERROR("Type: %s, wrapped type: %s. TOnce object name '%s'. In Collect(..) - dynamic cast failed. "
+				"RHS is named '%s'", _SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
 				this->GetName(), rhs.GetName());
 
 		if(strcmp(this->GetName(), rhs.GetName()) != 0)
@@ -1578,10 +1599,10 @@ public:
 		 * IDK, maybe define and catch last-resort a generic symbol:
 		 * template<typename T> void AddG_(T&, const T&) {} ? Then warn users that the code flow bounces here I guess. */
 		else {
-			ERROR("(%s) - Name: '\%s\' ; Underlying type \'%s\' doesn't define how to add or mean-up two instances, "
+			ERROR("(%s) - Name: '%s' ; Underlying type '%s' doesn't define how to add or mean-up two instances, "
 					"and also its been constructed without a runtime callback. "
 					"Define a `void Add(T&, const T& )` function or pass a lambda as second argument "
-					"of \'RegisterObject(..)\' (or another ctor).",
+					"of 'RegisterObject(..)' (or another ctor).",
 					_SELF_TYPE_CSTR, this->GetName(), mnd::type_name<T>().c_str());
 		}
 	}
@@ -1703,6 +1724,7 @@ struct TContainer : TContainerBase {
 	static_assert(!std::is_pointer_v<T>, "Must not pass pointer type (T*).");
 	static_assert(!std::is_reference_v<T>, "Must not pass ref type (T&).");
 
+	friend struct TProcessorBase;
 	template<typename>    friend struct TProcessor;
 	template<typename...> friend struct TAnalysisProcess;
 
@@ -1745,10 +1767,10 @@ public:
 		/* Flag the owned object with `CONTAINERNAME_` prefix. */
 		std::string obj_name = mnd::sstrcat(this->GetName(), "_", name);
 		for(auto& o : _vc) {
-			if(! strcmp(o->GetName(), obj_name.c_str())) {
+			if(strcmp(o->GetName(), obj_name.c_str()) == 0) {
 				TOnce<U> *dcast = dynamic_cast<TOnce<U>*>( o.get() );
 				if(!dcast)
-					ERROR("Attempted to retrieve object named \'%s\' from %zu-sized list of owned TOnce<..> objects."
+					ERROR("Attempted to retrieve object named '%s' from %zu-sized list of owned TOnce<..> objects."
 						"Found at address 0x%lx a 'TOnceBase' but dynamic_cast failed? Same object registered multiple times? (%s)",
 						name, _vc.size(), (uintptr_t)o.get(), _SELF_TYPE_CSTR);
 				return dcast->operator->();
@@ -1776,10 +1798,10 @@ public:
 		/* Flag the owned object with `CONTAINERNAME_` prefix. */
 		std::string obj_name = mnd::sstrcat(this->GetName(), "_", name);
 		for(auto& o : _vc) {
-			if(! strcmp(o->GetName(), obj_name.c_str())) {
+			if(strcmp(o->GetName(), obj_name.c_str()) == 0) {
 				TOnce<U> *dcast = dynamic_cast<TOnce<U>*>( o.get() );
 				if(!dcast)
-					ERROR("Attempted to retrieve object named \'%s\' from %zu-sized list of owned TOnce<..> objects."
+					ERROR("Attempted to retrieve object named '%s' from %zu-sized list of owned TOnce<..> objects."
 						"Found at address 0x%lx a 'TOnceBase' but dynamic_cast failed? Same object registered multiple times? (%s)",
 						name, _vc.size(), (uintptr_t)o.get(), _SELF_TYPE_CSTR);
 				return dcast->operator->();
@@ -1815,6 +1837,10 @@ public:
 	const T& inner()      const noexcept { return this->operator*(); }
 	T* operator->()             noexcept { return _inner.get(); }
 	const T* operator->() const noexcept { return _inner.get(); }
+
+private:
+	TOnceBaseVec& GetMutTOnceVec() noexcept { return this->_vc; }
+
 };
 
 /* Type `T` is either something like TXXXYYYEvent (Go4) or a custom structure
@@ -1853,7 +1879,10 @@ public:
 	const T* raw()        const noexcept { return this->operator->(); }
 };
 
+template<u32, typename...> struct TAnalysisPool;
+
 struct TProcessorBase {
+	template<u32, typename...> friend struct TAnalysisPool;
 	TProcessorBase() = default;
 	TProcessorBase(const TProcessorBase& ) = default;
 	TProcessorBase& operator=(const TProcessorBase& other) = default;
@@ -1861,9 +1890,46 @@ struct TProcessorBase {
 	TProcessorBase& operator=(TProcessorBase&& other) = default;
 
 	virtual ~TProcessorBase() = default;
-};
 
-template<typename T> struct TRawContainer;
+private:
+	/* This function should get called exactly once, just before the master
+	 * TAnalysisPool singleton starts the full analysis. Users can override it.
+	 * The use-case when to override it, would be if you need a self-reference *inside* one of the
+	 * output types. At the time this fnc gets called, all the output containers,
+	 * processors and heap-alloc'ed entities in `TOnce<T>` shall be pinned and won't move. */
+	virtual void FinalInit() {};
+
+protected:
+	/* If the output container and one of the input containers got identical label,
+	 * then copy over also the TOnce<..> objects that have a matching name. This call, of course,
+	 * has to be conditionally compiled since the TRawContainer doesn't have the _vc field. */
+	template<
+		typename DestinationCont,
+		typename SourceCont
+	> static void CopyIdenticalObjects(DestinationCont& dest, const SourceCont& src) {
+		if constexpr(mnd::is_base_of_template<TContainer, SourceCont>::value) {
+			if(strcmp(dest.GetName(), src.GetName()) != 0)
+				return;
+			
+			auto& v_out = dest.GetMutTOnceVec();
+			const auto& v_in  = src.GetTOnceVec();
+
+			for(std::shared_ptr<TOnceBase> o_item : v_out) {
+				for(std::shared_ptr<TOnceBase> i_item: v_in) {
+					if(strcmp(o_item->GetName(), i_item->GetName()) == 0) {
+						o_item->CopyFrom(*i_item);
+						WARN("(dest: %s%s%s && src: %s%s%s): CopyIdenticalObjects => Object named '%s' automatically copied.\n",
+							MND_RGB_COL(241,108,255), mnd::type_name<DestinationCont>().c_str(), KNRM,
+							MND_RGB_COL(182,255,108), mnd::type_name<SourceCont>().c_str(), KNRM, o_item->GetName());
+						break;
+					}
+				}
+			}
+		} else {
+			(void)dest, (void)src;
+		}
+	}
+};
 
 template<typename>
 struct TProcessor; /* Undefined. */
@@ -1881,6 +1947,9 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 		"Input type(s) must inherit from (or be) TContainer<T> / TRawContainer<T>.");
 	static_assert(mnd::is_base_of_template<TContainer, Out>::value, "Output type must inherit from (or be) TContainer<T>.");
 
+	using out_type = Out;
+	using in_type  = std::tuple<Ins...>;
+
 	Out out;
 	std::tuple<Ins...> in;
 	
@@ -1893,7 +1962,12 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 	 * Input objects, might be shared between different subprocesses - here we simply make our own copy.
 	 */
 	explicit TProcessor(Out& _out, const Ins&... ins) :
-		out(std::move(_out)), in(std::make_tuple(ins...)) {}
+		out(std::move(_out)), in(std::make_tuple(ins...))
+	{
+		mnd::for_each_in_tuple(in, [this](const auto& src) {
+			TProcessorBase::CopyIdenticalObjects(this->out, src);
+		});
+	}
 
 	TProcessor(const TProcessor& rhs) : TProcessorBase(rhs),
 		out(rhs.out),
@@ -1910,7 +1984,7 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 			 * will just give the raw pointer handles back to the user. */
 			out.Setup();
 		}
-	/*  ^^^^^ Now, each `_vc` is completely unique in the output container. */
+	/*  ^^^^^ Now, each item in `_vc` is completely unique in the output container. */
 	
 	/* Identical logic for copy-assignment op */
 	TProcessor& operator=(const TProcessor& rhs) {
@@ -1922,11 +1996,12 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 			out._vc.emplace_back( v->Clone() );
 		
 		out.Setup();
+
 		return *this;
 	}
 
-	TProcessor(TProcessor&& )            noexcept = default;	
-	TProcessor& operator=(TProcessor&& ) noexcept = default;	
+	TProcessor(TProcessor&& )            noexcept = default;
+	TProcessor& operator=(TProcessor&& ) noexcept = default;
 	
 	~TProcessor() = default;
 
@@ -1948,7 +2023,7 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 	/* These calls are sent during the final collection. Strict type checks
 	 * are kept, as runtime isn't sacrificed too much. */
 	void Collect(const TProcessor& rhs) {
-		std::vector<std::shared_ptr<TOnceBase>>       & lvc =     out._vc;
+		std::vector<std::shared_ptr<TOnceBase>>       & lvc = out.GetMutTOnceVec();
 		const std::vector<std::shared_ptr<TOnceBase>> & rvc = rhs.out.GetTOnceVec();
 		if( lvc.size() != rvc.size() )
 			ERROR("(%s) trying to collect but output object named \'%s\' has unmatching sizes. %zu != %zu",
@@ -1958,11 +2033,7 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 			lvc[i]->Collect( *rvc[i] );
 	}
 
-	using out_type = Out;
-	using in_type  = std::tuple<Ins...>;
 }; // TProcessor
-
-template<u32, typename...> struct TAnalysisPool;
 
 namespace mnd {
 
@@ -2228,6 +2299,7 @@ public:
 			std::move(_proc),
 			std::tuple<U>(std::move(w))
 		);
+
 		return TAnalysisProcess<Ts..., U> (
 			std::move(new_proc), std::move(info),
 			std::move(reader), std::move(writer)
@@ -2249,6 +2321,7 @@ public:
 			std::move(_proc),
 			std::make_tuple( U(std::forward<Out>(out), std::forward<Args>(args)... ) )
 		);
+
 		return TAnalysisProcess<Ts..., U> (
 			std::move(new_proc), std::move(info),
 			std::move(reader), std::move(writer)
@@ -2410,9 +2483,8 @@ public:
 			}, pairs
 		);
 	}
-	
+
 private:
-	
 	/* Each of the instances' writer is a slave to the initial one, which
 	 * holds the true unique pointer handle. */
 	void SetupWriter() {
@@ -2644,6 +2716,7 @@ private:
 		(void)cont;
 	}
 
+	
 }; // TAnalysisProcess
 
 /* Number of available threads via nproc. Optionally taken from `common.mk`
@@ -2760,8 +2833,12 @@ template <
 	/**
 	 * Send a batch of identical `NBatch` number of first entries
 	 * to each of the threads, to set up some initial parameters.
+	 * FinalInit() can be optionally also called at this point.
 	 */
-	void SendOneBatch(u64 startingIndex = 0, u32 NBatch = 0) {
+	void SendOneBatch(u64 startingIndex = 0, u32 NBatch = 0, bool call_final_init = false) {
+		if(call_final_init)
+			this->final_init();
+
 		if(NBatch == 0) NBatch = NSlice;
 		
 		u64 nLast = std::min (
@@ -2796,8 +2873,12 @@ template <
 #ifdef __HAS_INDICATORS
 		indicators::ProgressBar& bar,
 #endif
-		const u64 max_entries = static_cast<u64>(-1)
+		const u64 max_entries = static_cast<u64>(-1),
+		bool call_final_init = true
 	) {
+		if(call_final_init)
+			this->final_init();
+
 		auto& ref_process = Ref();
 
 		u64 nentries = std::min (
@@ -2838,6 +2919,7 @@ template <
 		Stop();
 
 #ifdef __HAS_INDICATORS
+		bar.mark_as_completed();
 		indicators::show_console_cursor(true);
 #endif
 
@@ -2878,6 +2960,14 @@ private:
 		}
 
 		dyadic_fold(std::move(next));
+	}
+
+	void final_init() {
+		for(auto& p : pool) {
+			auto base_proc_array = p.GetProcesses();
+			for(TProcessorBase* b : base_proc_array)
+				b->FinalInit();
+		}
 	}
 };
 
@@ -2939,8 +3029,12 @@ struct TAnalysisPool<1, Processors...> final {
 	/**
 	 * Send a batch of identical `NBatch` number of first entries
 	 * to the underlying process, to set up some initial parameters.
+	 * FinalInit() can be optionally also called at this point.
 	 */
-	void SendOneBatch(u64 startingIndex = 0, u32 NBatch = 0) {
+	void SendOneBatch(u64 startingIndex = 0, u32 NBatch = 0, bool call_final_init = false) {
+		if(call_final_init)
+			this->final_init();
+
 		if(NBatch == 0) NBatch = (NSlice > 0) ? NSlice : 2048;
 		auto& process = Ref();
 		u64 nLast = std::min (
@@ -2965,8 +3059,12 @@ struct TAnalysisPool<1, Processors...> final {
 #ifdef __HAS_INDICATORS
 		indicators::ProgressBar& bar,
 #endif
-		const u64 max_entries = static_cast<u64>(-1)
+		const u64 max_entries = static_cast<u64>(-1),
+		bool call_final_init = true
 	) {
+		if(call_final_init)
+			this->final_init();
+
 		auto& process = Ref();
 
 		u64 nentries = std::min (
@@ -2995,6 +3093,7 @@ struct TAnalysisPool<1, Processors...> final {
 		}
 
 #ifdef __HAS_INDICATORS
+		bar.mark_as_completed();
 		indicators::show_console_cursor(true);
 #endif
 
@@ -3016,6 +3115,13 @@ private:
 
 	/* bool _is_collected { false }; */
 	bool _is_written   { false };
+	
+	void final_init() {
+		auto& p = pool[0];
+		auto base_proc_array = p.GetProcesses();
+		for(TProcessorBase* b : base_proc_array)
+			b->FinalInit();
+	}
 };
 
 #endif /* __MONAD_INCLUDE_HXX__ */
