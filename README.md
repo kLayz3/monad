@@ -400,7 +400,7 @@ the output trees (but *can* fill the SO's).
 - `void Start()` start the analysis; split the input entry list into batches of size `NSlice` and fans them 
 out to workers via round-robin, populating their respective spsc queue with 'job requests'.
 
-## Standalone C++ metaprogramming library
+## Standalone C++ metaprogramming library <a name="meta"></a>
 MONAD can also be utilized as a standalone small metaprogramming library, albeit will
 still require ROOT libraries and linkage. All of the utilities that are used with statically sized arrays
 are `constexpr` qualified.
@@ -427,7 +427,8 @@ mnd::static_for<2,6>([](auto I) {               //   sub     rsp, 8
 // 4, 9, 16, 25,                                //   call    printf
                                                 //   mov     esi, 9 ...
 ```
-Or:
+It also accepts a reversed sequence, e.g., `<6,2>`, which unrolls to 6,5,4,3; and in that case that the bounds are equal, compiles down to a no-op.
+Another example:
 ```
 std::array a{2,3,4,5};
 std::array<int,4> b{};
@@ -447,16 +448,16 @@ std::array<int,4> b{};
 std::transform(a.begin(), a.end(), b.begin(), [](auto x) { return x*x; });
 std::cout << b << std::endl; // [4, 9, 16, 25]
 ```
-But in this case, still the second array needs to be default constructed and transform doesn't guarantee
-automatic loop unrolling. MONAD offers a `map` function which maps a callable object (a functor) over a
+In this example, the second array needs to be default constructed and the `std::transform` doesn't guarantee
+automatic loop unrolling for small arrays. MONAD offers a `map` function which maps a callable object (a functor) over a
 range-based container (i.e., any container that offers [begin](https://en.cppreference.com/cpp/iterator/begin) and 
 [end](https://en.cppreference.com/cpp/iterator/end) iterators) and collects the result either in a vector,
 or an `std::array` in case of statically sized containers.
 
-The most optimal way to rewrite the example above would be:
+The optimized way to rewrite the example above would be:
 ```
 std::array a{2,3,4,5};
-auto b = mnd::map(a, [](auto x) { return x*x; }); // no temporary array created!
+auto b = mnd::map(a, [](auto x) { return x*x; }); // no temporaries created!
 std::cout << b << std::endl; // [4, 9, 16, 25]
 ```
 

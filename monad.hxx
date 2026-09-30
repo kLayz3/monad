@@ -236,6 +236,14 @@
 	#define MND_NEVER_INLINE
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+	#define MND_LIKELY(expr)   __builtin_expect(static_cast<bool>(expr), 1)
+	#define MND_UNLIKELY(expr) __builtin_expect(static_cast<bool>(expr), 0)
+#else
+	#define MND_LIKELY(expr)   (expr)
+	#define MND_UNLIKELY(expr) (expr)
+#endif
+
 /* ROOT-like Form() w/o dependency. */
 namespace mnd {
 inline const char* msg(const char* fmt, ...) {
@@ -505,11 +513,13 @@ void Erase(std::vector<T>& v, Predicate p)
 
 /* ------------------------- */
 template<typename T>
-T rround(double x) noexcept { return static_cast<T>(x + 0.5); }
+constexpr T rround(double x) noexcept { return static_cast<T>(x + 0.5); }
 
 /* Predicate if the value is inside a range spanned by last 2 elements of some array. */
 template<typename T, typename U, std::size_t N>
-bool IsInside(const T& value, const std::array<U,N>& bounds) {
+constexpr bool IsInside(const T& value, const std::array<U,N>& bounds) noexcept(
+	noexcept(bounds[0] <= value and value < bounds[0])
+) {
 	static_assert(N >= 2, "Array size must be >= 2");
 	static_assert (
 		std::is_convertible_v<decltype(std::declval<const U&>() <= std::declval<const T&>()), bool> &&
@@ -520,13 +530,13 @@ bool IsInside(const T& value, const std::array<U,N>& bounds) {
 }
 
 template<typename T, std::size_t N>
-bool IsValid(const std::array<T,N>& bounds) {
+constexpr bool IsValid(const std::array<T,N>& bounds) noexcept {
 	static_assert(N >= 2, "Array size must be >= 2");
 	return std::isfinite(bounds[N-2]) and std::isfinite(bounds[N-1]);
 }
 
 template<typename... Ts>
-bool isfinite(Ts&&... ts) { /* All must pass the predicate. */
+constexpr bool isfinite(Ts&&... ts) noexcept { /* All must pass the predicate. */
 	static_assert(
 		(std::is_arithmetic_v<
 			std::remove_reference_t<Ts>
@@ -536,7 +546,9 @@ bool isfinite(Ts&&... ts) { /* All must pass the predicate. */
 }
 
 template<typename T>
-constexpr double clamp(const T& value, const std::array<T,2>& bounds) {
+constexpr double clamp(const T& value, const std::array<T,2>& bounds) noexcept(
+	noexcept(value < bounds[0])
+) {
 	static_assert(std::is_convertible_v<decltype(std::declval<const T&>() < std::declval<const T&>()), bool>,
 		 "Type T must support comparison operator T < T.");
 	return (value < bounds[0]) ? bounds[0]
@@ -614,7 +626,7 @@ template<typename... Ts>
 using Variant = std::variant<Empty, Ts...>;
 
 template<typename... Ts>
-constexpr bool IsEmpty(const Variant<Ts...>& v) {
+constexpr bool IsEmpty(const Variant<Ts...>& v) noexcept {
 	return v.valueless_by_exception() or std::holds_alternative<Empty>(v);
 }
 
@@ -1082,18 +1094,18 @@ template<
 template <
 	typename Callable,
 	std::size_t... Is
-> void _static_for_impl(Callable&& f, std::index_sequence<Is...>)
+> constexpr void _static_for_impl(Callable&& f, std::index_sequence<Is...>)
 	noexcept((std::is_nothrow_invocable <
 		Callable&, std::integral_constant<std::size_t, Is>
 	>::value && ...))
 {
-	(..., std::invoke(f, std::integral_constant<std::size_t, Is>{}));
+	(..., f(std::integral_constant<std::size_t, Is>{}));
 }
 template <
 	std::size_t Begin,
 	std::size_t End,
 	typename Callable
-> void static_for(Callable&& f)
+> constexpr void static_for(Callable&& f)
 	noexcept( noexcept(_static_for_impl(
 		std::forward<Callable>(f),
 		make_index_range<Begin, End>{}
@@ -1115,19 +1127,19 @@ template <
 	typename Arr,
 	typename Callable,
 	std::size_t... Is
-> void _static_for_each_impl(Arr&& arr, Callable&& f, std::index_sequence<Is...>)
+> constexpr void _static_for_each_impl(Arr&& arr, Callable&& f, std::index_sequence<Is...>)
 	noexcept((noexcept(std::invoke(
 		std::declval<Callable&>(),
 		std::declval<Arr>()[Is]
 	)) && ...))
 {
-	(..., std::invoke(f, std::forward<Arr>(arr)[Is]));
+	(..., f(std::forward<Arr>(arr)[Is]));
 }
 
 template <
 	typename Arr,
 	typename Callable
-> void static_for_each(Arr&& arr, Callable&& f)
+> constexpr void static_for_each(Arr&& arr, Callable&& f)
 	noexcept( noexcept(_static_for_each_impl(
 		std::forward<Arr>(arr),
 		std::forward<Callable>(f),
@@ -1150,10 +1162,14 @@ template <
 	typename Arr,
 	typename T = typename is_an_array<remove_cvref_t<Arr>>::underlying_type,
 	typename R = std::conditional_t<std::is_void_v<ResultType>, T, ResultType>
-> constexpr R sum(const Arr& arr) noexcept {
+> constexpr R sum(const Arr& arr) noexcept /* We don't explicitly check if its noexcept.. TODO. */
+{
 	static_assert(has_add_binary_op<R>::value, "Underlying type must have binary addition operator well defined.");
 	if constexpr(U == Unroll::No) {
-		return std::accumulate( std::cbegin(arr), std::cend(arr), static_cast<T>(0) );
+		R result = static_cast<R>(0);
+		for(const auto& value : arr)
+			result = std::move(result) + static_cast<R>(value);
+		return result;
 	} else {
 		R sum = static_cast<R>(0);
 		static_for_each(arr, [&sum](const T& val) { sum = std::move(sum) + static_cast<R>(val); });
@@ -1177,17 +1193,17 @@ struct MeanVar {
 	inline operator std::pair<double,double>() const noexcept { return { mean, var }; }
 	inline operator std::array<double,2>() const noexcept { return { mean, var }; }
 
-	friend std::ostream& operator<<(std::ostream& os, const MeanVar& rhs) noexcept {
+	friend std::ostream& operator<<(std::ostream& os, const MeanVar& rhs) {
 		return os << rhs.mean << " ± " << std::sqrt( rhs.var );
 	}
 
-	inline std::string string() const noexcept {
+	inline std::string string() const {
 		std::stringstream ss;
 		ss << *this;
 		return ss.str();
 	}
 
-	inline std::string lstring() const noexcept {
+	inline std::string lstring() const {
 		std::stringstream ss;
 		ss << mean << " #pm " << std::sqrt(var);
 		return ss.str();
@@ -1227,7 +1243,7 @@ template <
 	typename Range,
 	typename Bare = remove_cvref_t<Range>,
 	typename = typename std::enable_if_t<!is_an_array<Bare>::value>
-> MeanVar mean_var(const Range& r) {
+> MeanVar mean_var(const Range& r) noexcept {
 	static_assert(mnd::is_range<Range>::value,
 		"Type `Range` must be an MONAD-compatible range.");
 	using T = typename mnd::is_range<Range>::underlying_type;
@@ -1290,29 +1306,39 @@ template<
 }
 
 namespace detail {
+template<typename Arr, typename Callable>
+using map_array_value_t = std::decay_t<
+	std::invoke_result_t<Callable&, decltype(*std::begin(
+		std::declval<const Arr&>()))>
+>;
+
 template<typename Arr, typename Callable, std::size_t... I>
 constexpr auto map_array(
 	const Arr& input,
 	Callable& fn,
 	std::index_sequence<I...>
-) {
-	using U = std::decay_t<
-		std::invoke_result_t<Callable&, decltype(*std::begin(input))>
-	>;
-
-	return std::array<U, sizeof...(I)>{
-		std::invoke(fn, input[I])...
-	};
+) noexcept(noexcept(
+	std::array<map_array_value_t<Arr, Callable>, sizeof...(I)>{
+		fn(input[I])...
+	}
+)) {
+	using U = map_array_value_t<Arr, Callable>;
+	return std::array<U, sizeof...(I)>{ fn(input[I])... };
 }
 } // namespace detail
 
 /* Maps a static range of size N and underlying type <T> via the functor fn: T -> U, and collects
- * the results as std::array<U,N>. This is *not a lazy evaluator! */
+ * the results as std::array<U,N>. This is *not* a lazy evaluator! */
 template<
 	typename Arr,
 	typename Callable,
 	typename std::enable_if_t<is_an_array_v<Arr>>* = nullptr
-> constexpr auto map(const Arr& input, Callable&& fn) {
+> constexpr auto map(const Arr& input, Callable&& fn) noexcept(
+	noexcept(detail::map_array(
+		input, fn,
+		std::make_index_sequence<is_an_array<Arr>::size>{}
+	))
+) {
 	return detail::map_array(input, fn,
 		std::make_index_sequence<is_an_array<Arr>::size>{}
 	);
@@ -1452,12 +1478,16 @@ std::ostream& operator<<(std::ostream& os, mnd::span<T> values) {
  * We inspect them by taking a copy and popping it down. */
 template<typename T, typename Container>
 std::ostream& operator<<(std::ostream& os, const std::stack<T, Container>& v) {
+	static_assert(std::is_copy_constructible_v<T> && std::is_copy_constructible_v<Container>,
+		"Printing the stack<T,C> requires copy-constructible underlying element type T, and container itself.");
 	return detail::output_adaptor(os, v,
 		[](const auto& a) -> decltype(auto) { return a.top(); }
 	);
 }
 template<typename T, typename Container>
 std::ostream& operator<<(std::ostream& os, const std::queue<T, Container>& v) {
+	static_assert(std::is_copy_constructible_v<T> && std::is_copy_constructible_v<Container>,
+		"Printing the queue<T,C> requires copy-constructible underlying element type T, and container itself.");
 	return detail::output_adaptor(os, v,
 		[](const auto& a) -> decltype(auto) { return a.front(); }
 	);
@@ -1467,6 +1497,8 @@ std::ostream& operator<<(
 	std::ostream& os,
 	const std::priority_queue<T, Container, Compare>& v
 ) {
+	static_assert(std::is_copy_constructible_v<T> && std::is_copy_constructible_v<Container>,
+		"Formatting the priority_queue<T,C,Comp> requires copy-constructible underlying element type T, and container itself.");
 	return detail::output_adaptor(os, v,
 		[](const auto& a) -> decltype(auto) { return a.top(); }
 	);
