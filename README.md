@@ -15,10 +15,11 @@
   - [`TProcessor`](#tprocessor)
   - [`TAnalysisProcess`](#tanalysisprocess)
   - [`TAnalysisPool`](#tanalysispool)
+- [Use as a standalone metaprogramming library](#meta)
 - [Example in projects](#phd)
 
 ## Overview <a name="overview"></a>
-A lightweight header-only library inspired by [FairROOT](https://github.com/FairRootGroup/FairRoot) and 
+A lightweight header-only library inspired by [FairROOT](https://github.com/FairRootGroup/FairRoot) and
 [Go4](https://github.com/gsi-ee/go4) that allows for modular and functional analysis embedded in
 CERN ROOT framework.
 
@@ -28,12 +29,13 @@ CERN ROOT framework.
 - **Type driven**
   - All (de)serialization target type compatibility checked at compilation time.
   - Strict compiler checks.
-- Multithreading 
+- Multithreading
   - Split entry pool into chunks, process via *worker pools*
   - Can opt into pure single-threaded for *e.g.* cluster tasks.
 - Entry-wise output data stored in [RNTuple](https://root.cern/doc/master/group__tutorial__ntuple.html) format
 
 Dependencies are C++17, ROOT 6.34+ and [boost](https://www.boost.org/doc/user-guide/getting-started.html).
+MONAD is also a library of lots of useful specific metaprogramming tricks, involving loop unrolling, ranges mapping, general STL- containers formatting and offers faster compilation times, compared to the standard BOOST TMP libraries such as [hana](https://github.com/boostorg/hana)
 
 ## Installation <a name="installation"></a>
 Grab a hold of the project via `git clone` with the only `monad.hxx` file to be included. 
@@ -398,6 +400,96 @@ the output trees (but *can* fill the SO's).
 - `void Start()` start the analysis; split the input entry list into batches of size `NSlice` and fans them 
 out to workers via round-robin, populating their respective spsc queue with 'job requests'.
 
+## Standalone C++ metaprogramming library
+MONAD can also be utilized as a standalone small metaprogramming library, albeit will
+still require ROOT libraries and linkage. All of the utilities that are used with statically sized arrays
+are `constexpr` qualified.
+
+### General C++ formatter
+Any STL- container of underlying type `Foo` for which there exists a defined unqualified
+`std::ostream& operator<<(std::ostream&, Foo const&)` function, can be directly formatted. Unqualified means
+that the free function is defined either as a hidden friend, in the targeted type's namespace, or in the
+global namespace.
+To not conflict with other libs or users' own rolled functions, the MONAD's formatter needs 
+to be marked for unqualified lookup, as explained in the `common.mk` file.
+
+### Compile-time loop unrolling
+For hot performance-critical loops, one can utilise `mnd::static_for` and `mnd::static_for_each`
+generic functions for either loop unrolling or invoking a callable function over a statically sized container,
+`T[N]` or `std::array<T,N>`, respectively. For example:
+```
+
+                                                //   .LCO: .string "%zu, "
+mnd::static_for<2,6>([](auto I) {               //   sub     rsp, 8
+  constexpr std::size_t i = decltype(I)::value; //   mov     esi, 4
+  printf("%zu, ", i*i);                         //   mov     edi, OFFSET FLAT:.LCO
+});                                             //   xor     eax, eax
+// 4, 9, 16, 25,                                //   call    printf
+                                                //   mov     esi, 9 ...
+```
+Or:
+```
+std::array a{2,3,4,5};
+std::array<int,4> b{};
+mnd::static_for_each(arr, [&b](auto I) {
+  constexpr std::size_t i = decltype(I)::value;
+  b[i] = a[i] * a[i];
+}
+std::cout << b << std::endl; // [4, 9, 16, 25]
+```
+
+
+## Map function
+The example with `std::array` just above can be rewritten in C++17-way as:
+```
+std::array a{2,3,4,5};
+std::array<int,4> b{};
+std::transform(a.begin(), a.end(), b.begin(), [](auto x) { return x*x; });
+std::cout << b << std::endl; // [4, 9, 16, 25]
+```
+But in this case, still the second array needs to be default constructed and transform doesn't guarantee
+automatic loop unrolling. MONAD offers a `map` function which maps a callable object (a functor) over a
+range-based container (i.e., any container that offers [begin](https://en.cppreference.com/cpp/iterator/begin) and 
+[end](https://en.cppreference.com/cpp/iterator/end) iterators) and collects the result either in a vector,
+or an `std::array` in case of statically sized containers.
+
+The most optimal way to rewrite the example above would be:
+```
+std::array a{2,3,4,5};
+auto b = mnd::map(a, [](auto x) { return x*x; }); // no temporary array created!
+std::cout << b << std::endl; // [4, 9, 16, 25]
+```
+
+Output container does not have to have the same underlying type as the input container, and it
+can be used even in a constant expression contexts:
+```
+constexpr std::array a{2,3,4,5};
+constexpr auto b = mnd::map(a, [](auto x) { return std::array{ (static_cast<double>)(x*x) }; });
+std::cout << b << std::endl; // [[4.0], [9.0], [16.0], [25.0]]
+```
+
+## Complete type lookup
+`template<typename T> std::string type_name()` returns the complete name of a type `T`, with
+associated ref and const/volatile qualifiers.
+
+## Arithmetic operations
+These are straightforward to implement, and only accept arithmetic types (via `std::is_arithmetic` type-trait):
+- `template<typename T> constexpr auto median(const T& sorted_array) noexcept`
+- `template<typename... Ts> constexpr auto min(Ts... ) noexcept`
+- `template<typename... Ts> constexpr auto max(Ts... ) noexcept`
+
+Then also `sum` and `mean` functions over an array:
+```
+constexpr std::array a{1,2,3,4,9};
+std::cout << mnd::sum(a) << ", "
+  << mnd::sum<double>(a) << ", "
+  << mnd::mean(a) << ", "
+  << mnd::mean<mnd::Unroll::Yes, double>(a) << ", "
+  << mnd::median(a);
+// 19, 19.0, 9, 9.5, 3
+```
+
+
 ## Example of usage <a name="phd"></a>
 Broad usage of MONAD is in [author's PhD analysis code](https://git.gsi.de/m.bajzek/sec-s118).
 
@@ -407,3 +499,4 @@ Broad usage of MONAD is in [author's PhD analysis code](https://git.gsi.de/m.baj
   - Far more problematic is the context switching if task gets repinned somewhere else...
 
 - An API to allow a `TOnce<T>` writer without needing an output column
+- Opt into the whole ROOT part, and keep only the meta-lib part. MONAD should be easily usable in non CERN-ROOT environments.

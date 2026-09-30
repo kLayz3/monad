@@ -37,12 +37,18 @@
 #include <utility>
 #include <variant>
 #include <vector>
+#include <array>
+#include <map>
+#include <unordered_map>
+#include <unordered_set>
+#include <queue>
+#include <stack>
 #include <fstream>
 #include <typeinfo>
 #include <optional>
 #include <filesystem>
-#include <unordered_map>
 #include <tuple>
+
 #include <atomic>
 #include <thread>
 
@@ -396,16 +402,40 @@ namespace mnd {
 
 /* Helper fnc's to convert a contiguous containers to a span.
  * Problem is that BOOST 1.73 has explicit ctor from ContContainer,
- * and it is relaxed in later BOOST versions. */
-template<typename T>
-span<const T> as_span(const std::vector<T>& v) noexcept {
+ * and it is relaxed in later BOOST versions. Also C++17 doesn't allow deduction
+ * guides for aliased types. Which is a shame.
+ * NOTE: Cannot be used with std::vector<bool> due to the .data() and size() accessors. */
+template<typename T, typename Alloc>
+span<T> as_span(std::vector<T, Alloc>& v) noexcept {
+	return span<T>{v.data(), v.size()};
+}
+template<typename T, typename Alloc>
+span<const T> as_span(const std::vector<T, Alloc>& v) noexcept {
 	return span<const T>{v.data(), v.size()};
 }
 
 template<typename T, std::size_t N>
-span<const T> as_span(const std::array<T, N>& a) noexcept {
+constexpr span<T> as_span(std::array<T, N>& a) noexcept {
+	return span<T>{a.data(), a.size()};
+}
+template<typename T, std::size_t N>
+constexpr span<const T> as_span(const std::array<T, N>& a) noexcept {
 	return span<const T>{a.data(), a.size()};
 }
+
+template<typename T>
+constexpr span<T> as_span(T* p, std::size_t n) noexcept {
+	return span<T>{p, n};
+}
+
+template<typename T, typename Alloc>
+void as_span(const std::vector<T, Alloc>&&) = delete;
+template<typename T, std::size_t N>
+void as_span(const std::array<T, N>&&) = delete;
+template<typename Alloc>
+void as_span(std::vector<bool, Alloc>& ) = delete;
+template<typename Alloc>
+void as_span(const std::vector<bool, Alloc>& ) = delete;
 
 #if defined(__HAS_INDICATORS)
 
@@ -432,13 +462,13 @@ inline bool PrintProgress (
 
 #endif // __HAS_INDICATORS
 
-template<typename T> 
+template<typename T>
 void QuickSwap(std::vector<T>& v, int i, int j) noexcept {
 	if(!v.size()) return;
     std::swap(v[i], v[j]);
 }
 
-template<typename T> 
+template<typename T>
 void QuickErase(std::vector<T>& v, int i) noexcept {
     std::swap(v[i], v.back());
     v.pop_back();
@@ -574,16 +604,6 @@ void PrintElapsed(std::vector<TimePoint>&& v) {
 	PrintElapsed<E>(v.back(), v.front());
 }
 
-/**
- * Concatenates bunch of string arguments which can be lvalues, statics, etc. and returns an owned std::string.
- */
-template<typename... Args>
-std::string sstrcat(Args&&... args) {
-	std::ostringstream oss{};
-	(oss << ... << std::forward<Args>(args));
-	return oss.str();
-}
-
 /* ----- std::variant trickery. ----- */
 using Empty = std::monostate;
 
@@ -701,15 +721,33 @@ struct ToStdArray<T[N]> { using type = std::array<typename ToStdArray<T>::type, 
 template<typename T>
 using ToStdArray_t = typename ToStdArray<T>::type;
 
+/* Range is simply defined as any type that has a begin() and end() iterator */
 template<typename T, typename = void>
 struct is_range : std::false_type {};
 template<typename T>
 struct is_range<T, std::void_t <
-	typename T::value_type,
-	decltype( std::begin(std::declval<T>()) ),
-	decltype( std::end(std::declval<T>()) )
+	decltype( std::begin(std::declval<T&>()) ),
+	decltype( std::end(std::declval<T&>()) ),
+	typename std::iterator_traits<
+		decltype(std::begin(std::declval<T&>()))
+	>::value_type
 >> : std::true_type {
-	using underlying_type = typename T::value_type;
+	using underlying_type = typename std::iterator_traits<
+		decltype( std::begin(std::declval<T&>()) )
+	>::value_type;
+};
+
+template<typename, typename = void>
+struct is_sized_range : std::false_type {};
+template<typename T>
+struct is_sized_range <
+	T,
+	std::void_t <
+		typename is_range<T>::underlying_type,
+		decltype(std::size(std::declval<T&>()))
+	>
+> : std::true_type {
+	using underlying_type = typename is_range<T>::underlying_type;
 };
 
 template<typename, typename = void>
@@ -718,14 +756,11 @@ template<typename T>
 struct is_indexable_range <
 	T,
 	std::void_t <
-		typename T::value_type,
-		decltype(std::begin(std::declval<T&>())),
-		decltype(std::end(std::declval<T&>())),
-		decltype(std::declval<T&>().size()),
+		typename is_sized_range<T>::underlying_type,
 		decltype(std::declval<T&>()[std::declval<std::size_t>()])
 	>
 > : std::true_type {
-	using underlying_type = typename T::value_type;
+	using underlying_type = typename is_range<T>::underlying_type;
 };
 
 template<typename T, typename = void>
@@ -734,9 +769,9 @@ template<typename T>
 struct has_clean_noexcept <T,
 	std::void_t<decltype(std::declval<T&>().Clean())>
 > : std::bool_constant <
-		std::is_same_v<void, decltype(std::declval<T&>().Clean())> &&
-		noexcept(std::declval<T&>().Clean())
-	> {};
+	std::is_same_v<void, decltype(std::declval<T&>().Clean())> &&
+	noexcept(std::declval<T&>().Clean())
+> {};
 
 template<typename, typename = std::void_t<>>
 struct has_value_type : std::false_type {};
@@ -952,13 +987,13 @@ template<typename T,
 	typename U = remove_cvref_t<T>,
 	std::size_t N = is_an_array<U>::size,
 	char(*)[N % 2] = nullptr
-> auto median(const T& sorted_arr) noexcept { return sorted_arr[N/2]; }
+> constexpr auto median(const T& sorted_arr) noexcept { return sorted_arr[N/2]; }
 
 template<typename T,
 	typename U = remove_cvref_t<T>,
 	std::size_t N = is_an_array<U>::size,
 	char(*)[!(N % 2)] = nullptr
-> auto median(const T& sorted_arr) noexcept { return ( sorted_arr[N/2] + sorted_arr[N/2 - 1] ) / 2; }
+> constexpr auto median(const T& sorted_arr) noexcept { return ( sorted_arr[N/2] + sorted_arr[N/2 - 1] ) / 2; }
 
 template<typename T, typename... Ts>
 constexpr auto min(T t, Ts... ts) noexcept {
@@ -997,6 +1032,8 @@ template<typename T,
 		if(arr[i] == val) return i;
 	return -1;
 }
+
+/* Not really needed, as `std::size()` does very similar thing. Kept for BC */
 template<typename T,
 	typename U = remove_cvref_t<T>
 > constexpr int len(const T& arr) noexcept {
@@ -1228,13 +1265,232 @@ constexpr std::array<T, N> make_filled_array(T value) {
 	return _make_filled_array_impl<T>(value, std::make_index_sequence<N>{});
 }
 
+/* Maps a dynamic range of underlying type <T> via the functor fn: T -> U, and collects
+ * the results as std::vector<U>. This is *not* a lazy evaluator! */
+template<
+	typename Range,
+	typename Callable,
+	typename std::enable_if_t<!is_an_array_v<Range>>* = nullptr
+> auto map(const Range& input, Callable&& fn) {
+	static_assert(is_range<const Range>::value, "Type T must support a const range iteration.");
+	using U = std::decay_t<
+		std::invoke_result_t<Callable&, decltype(*std::begin(input))>
+	>;
+
+	std::vector<U> output;
+	if constexpr(is_sized_range<const Range>::value) {
+		output.reserve(std::size(input));
+	}
+
+	for(auto&& value : input)
+		output.emplace_back(
+			std::invoke(fn, std::forward<decltype(value)>(value))
+		);
+	return output;
+}
+
+namespace detail {
+template<typename Arr, typename Callable, std::size_t... I>
+constexpr auto map_array(
+	const Arr& input,
+	Callable& fn,
+	std::index_sequence<I...>
+) {
+	using U = std::decay_t<
+		std::invoke_result_t<Callable&, decltype(*std::begin(input))>
+	>;
+
+	return std::array<U, sizeof...(I)>{
+		std::invoke(fn, input[I])...
+	};
+}
+} // namespace detail
+
+/* Maps a static range of size N and underlying type <T> via the functor fn: T -> U, and collects
+ * the results as std::array<U,N>. This is *not a lazy evaluator! */
+template<
+	typename Arr,
+	typename Callable,
+	typename std::enable_if_t<is_an_array_v<Arr>>* = nullptr
+> constexpr auto map(const Arr& input, Callable&& fn) {
+	return detail::map_array(input, fn,
+		std::make_index_sequence<is_an_array<Arr>::size>{}
+	);
+}
+
+namespace fmt {
+namespace detail {
+
+template<typename T>
+struct range_format {
+	static constexpr bool enabled = false;
+	static constexpr bool keyed = false;
+};
+template<typename T, std::size_t N>
+struct range_format<std::array<T, N>> {
+	static constexpr bool enabled = true;
+	static constexpr bool keyed = false;
+};
+/* Copy-pasta from https://en.cppreference.com/cpp/container §Iterator invalidation */
+#define MND_FMT_SEQUENCE(Container) \
+	template<typename... Args> \
+	struct range_format<Container<Args...>> { \
+		static constexpr bool enabled = true; \
+		static constexpr bool keyed = false; \
+	}
+#define MND_FMT_MAP(Container) \
+	template<typename... Args> \
+	struct range_format<Container<Args...>> { \
+		static constexpr bool enabled = true; \
+		static constexpr bool keyed = true; \
+	}
+
+MND_FMT_SEQUENCE(std::vector);
+MND_FMT_SEQUENCE(std::deque);
+MND_FMT_SEQUENCE(std::list);
+MND_FMT_SEQUENCE(std::set);
+MND_FMT_SEQUENCE(std::multiset);
+MND_FMT_MAP(std::map);
+MND_FMT_MAP(std::multimap);
+MND_FMT_SEQUENCE(std::unordered_set);
+MND_FMT_SEQUENCE(std::unordered_multiset);
+MND_FMT_MAP(std::unordered_map);
+MND_FMT_MAP(std::unordered_multimap);
+
+#undef MND_FMT_MAP
+#undef MND_FMT_SEQUENCE
+
+} // namespace detail
+
+/* FWD declarations so nesting works. Long live recursion :) */
+template<typename Range,
+	typename std::enable_if_t<detail::range_format<Range>::enabled>* = nullptr
+> std::ostream& operator<<(std::ostream&, const Range&);
+
+/* Special stack/queue/priority_queue overloads. */
+template<typename T, typename Container>
+std::ostream& operator<<(std::ostream&, const std::stack<T, Container>&);
+template<typename T, typename Container>
+std::ostream& operator<<(std::ostream&, const std::queue<T, Container>&);
+template<typename T, typename Container, typename Compare>
+std::ostream& operator<<(std::ostream&, const std::priority_queue<T, Container, Compare>&);
+
+/* Also general span. */
+template<typename T>
+std::ostream& operator<<(std::ostream&, mnd::span<T>);
+
+namespace detail {
+
+template<bool Keyed, typename Iterator>
+std::ostream& output_range(
+	std::ostream& os,
+	Iterator first,
+	Iterator last
+) {
+	if constexpr(Keyed) os << '{';
+	else                os << '[';
+
+	if(first != last) {
+		if constexpr(Keyed)
+			os << first->first << ": " << first->second;
+		else
+			os << *first;
+
+		while(++first != last) {
+			os << ", ";
+			if constexpr(Keyed)
+				os << first->first << ": " << first->second;
+			else
+				os << *first;
+		}
+	}
+
+	if constexpr(Keyed) return os << '}';
+	else                return os << ']';
+}
+
+template<typename Adaptor, typename GetNext>
+std::ostream& output_adaptor(
+	std::ostream& os,
+	Adaptor copy,
+	GetNext get_next
+) {
+	os << '[';
+
+	if(!copy.empty()) {
+		os << get_next(copy);
+		copy.pop();
+	
+		while(!copy.empty()) {
+			os << ", " << get_next(copy);
+			copy.pop();
+		}
+	}
+
+	return os << ']';
+}
+
+} // namespace detail
+
+template<typename Range,
+	typename std::enable_if_t<detail::range_format<Range>::enabled>*
+> std::ostream& operator<<(std::ostream& os, const Range& range) {
+	return detail::output_range<detail::range_format<Range>::keyed>(
+		os, range.begin(), range.end()
+	);
+}
+template<typename T>
+std::ostream& operator<<(std::ostream& os, mnd::span<T> values) {
+	return detail::output_range<false>(
+		os, values.begin(), values.end()
+	);
+}
+/* ^^^ Not exposing generic: std::ostream& operator<<(std::ostream& , const T (&)[N] )
+ * as it would blow up with most standard overloads, even the "Hello World" breaks then... */
+
+/* Special overloads for stack/queue/prio_queue as these don't expose iteration.
+ * We inspect them by taking a copy and popping it down. */
+template<typename T, typename Container>
+std::ostream& operator<<(std::ostream& os, const std::stack<T, Container>& v) {
+	return detail::output_adaptor(os, v,
+		[](const auto& a) -> decltype(auto) { return a.top(); }
+	);
+}
+template<typename T, typename Container>
+std::ostream& operator<<(std::ostream& os, const std::queue<T, Container>& v) {
+	return detail::output_adaptor(os, v,
+		[](const auto& a) -> decltype(auto) { return a.front(); }
+	);
+}
+template<typename T, typename Container, typename Compare>
+std::ostream& operator<<(
+	std::ostream& os,
+	const std::priority_queue<T, Container, Compare>& v
+) {
+	return detail::output_adaptor(os, v,
+		[](const auto& a) -> decltype(auto) { return a.top(); }
+	);
+}
+
+} // namespace fmt
+using fmt::operator<<;
+
 template<typename T,
 	typename = std::void_t<
 		decltype(std::declval<std::ostream&>() << std::declval<const T&>())
->> std::string streamable(const T& obj) {
+	>
+> std::string streamable(const T& obj) {
 	std::ostringstream os;
 	os << obj;
 	return os.str();
+}
+
+/* Concatenates bunch of streamable arguments which can be lvalues, statics, etc. and returns an owned std::string. */
+template<typename... Args>
+std::string sstrcat(Args&&... args) {
+	std::ostringstream oss{};
+	(oss << ... << std::forward<Args>(args));
+	return oss.str();
 }
 
 /* Returns the name of the type passed, also adding
@@ -3123,5 +3379,9 @@ private:
 			b->FinalInit();
 	}
 };
+
+#ifdef MND_EXPORT_OSTREAM_G_NAMESPACE
+using mnd::fmt::operator<<;
+#endif
 
 #endif /* __MONAD_INCLUDE_HXX__ */

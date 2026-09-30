@@ -10,7 +10,7 @@ ifneq ($(OPTIMIZATION), 1)
 CXXFLAGS += -ggdb -g -O0 -fno-omit-frame-pointer -fno-inline \
 	-fsanitize=undefined,address \
 	-DBOOST_STACKTRACE_USE_ADDR2LINE \
-	-DMND_DEBUG_ENABLED
+	#-DMND_DEBUG_ENABLED
 
 LDFLAGS += -fsanitize=undefined,address
 
@@ -28,3 +28,10 @@ MONAD_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 MND_INCLUDE_DIR := $(MONAD_DIR)indicators/include
 
 CXXFLAGS += -I$(MND_INCLUDE_DIR)
+
+# MONAD defines in its namespace ostream& operator<< overloads for all STL containers.
+# The following define marks the mnd::operator<< eligible for unqualified lookup.
+# NOTE: if you use a specialized library or self-roll some of the overloads, then compiler *will*
+# complain, as it won't be able to unambiguously resolve it.
+
+CXXFLAGS += -DMND_EXPORT_OSTREAM_G_NAMESPACE
