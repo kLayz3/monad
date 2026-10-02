@@ -495,7 +495,7 @@ std::cout << mnd::sum(a) << ", "
 Broad usage of MONAD is in [author's PhD analysis code](https://git.gsi.de/m.bajzek/sec-s118).
 
 ## Todo ideas:
-- Pin the workers' threads to a close NUMA node? 
+- Pin the workers' threads to a close NUMA node?
   - Is it really worth it? The only channel is the `spsc_queue` and for that it doesn't matter much?
   - Far more problematic is the context switching if task gets repinned somewhere else...
 

@@ -270,7 +270,7 @@ inline const char* msg(const char* fmt, ...) {
 
 	return buffer.c_str();
 }
-inline void safe_write(int fd, const char* s, size_t n) noexcept {
+inline void safe_write(int fd, const char* s, std::size_t n) noexcept {
 	ssize_t r = ::write(fd, s, n);
 	(void)r; // ignored; to shutup GCC's ‘warn_unused_result’ [-Wunused-result]
 }
@@ -294,9 +294,11 @@ inline std::thread::id main_thread_id = std::this_thread::get_id();
 	} while(0)
 
 #define WARN_WITH_STACKTRACE(...) \
-	WARN(__VA_ARGS__) \
-	fputc('\n', stderr); \
-	std::cerr << ::mnd::stacktrace(); \
+	do { \
+		WARN(__VA_ARGS__); \
+		fputc('\n', stderr); \
+		std::cerr << ::mnd::stacktrace(); \
+	} while (0)
 
 #define WARN(...) \
 	do { \
@@ -403,7 +405,7 @@ void Add(std::vector<T>& lhs, const std::vector<T>& rhs);
 	}
 #else
 #	error "Neither C++20 given, nor boost span library for found. Cannot proceed."
-#endif
+#endif // __cplusplus >= 202000L
 #endif // MND_INCLUDE_SPAN_IS_DEFINED
 
 namespace mnd {
@@ -421,7 +423,6 @@ template<typename T, typename Alloc>
 span<const T> as_span(const std::vector<T, Alloc>& v) noexcept {
 	return span<const T>{v.data(), v.size()};
 }
-
 template<typename T, std::size_t N>
 constexpr span<T> as_span(std::array<T, N>& a) noexcept {
 	return span<T>{a.data(), a.size()};
@@ -430,7 +431,6 @@ template<typename T, std::size_t N>
 constexpr span<const T> as_span(const std::array<T, N>& a) noexcept {
 	return span<const T>{a.data(), a.size()};
 }
-
 template<typename T>
 constexpr span<T> as_span(T* p, std::size_t n) noexcept {
 	return span<T>{p, n};
@@ -471,49 +471,53 @@ inline bool PrintProgress (
 #endif // __HAS_INDICATORS
 
 template<typename T>
-void QuickSwap(std::vector<T>& v, int i, int j) noexcept {
+void QuickSwap(std::vector<T>& v, int i, int j) noexcept(
+	noexcept( std::swap(v[i], v[j]) )
+){
 	if(!v.size()) return;
     std::swap(v[i], v[j]);
 }
 
 template<typename T>
-void QuickErase(std::vector<T>& v, int i) noexcept {
+void QuickErase(std::vector<T>& v, int i) noexcept(
+	noexcept( std::swap(v[i], v.back()) )
+) {
     std::swap(v[i], v.back());
     v.pop_back();
 }
 
 template<typename T>
-void Append(std::vector<T>& dst, const std::vector<T>& src) noexcept {
-	dst.reserve(dst.size() + src.size());
-	dst.insert(dst.end(), src.begin(), src.end());
-}
-
-template<typename T>
-void Append(std::vector<T>& dst, std::vector<T>&& src) noexcept {
+void Append(std::vector<T>& dst, std::vector<T>&& src) {
 	if(&dst == &src) return;
 	dst.reserve(dst.size() + src.size());
 	dst.insert(dst.end(),
 		std::make_move_iterator(src.begin()),
 		std::make_move_iterator(src.end()));
-	/* src vector left in undefined state. */
+}
+
+template<typename T>
+void Append(std::vector<T>& dst, const std::vector<T>& src) {
+	if( MND_UNLIKELY(&dst == &src)) {
+		auto copy = src;
+		return Append(dst, std::move(copy));
+	}
+	dst.reserve(dst.size() + src.size());
+	dst.insert(dst.end(), src.begin(), src.end());
 }
 
 /* Filter a vector in-place based on the predicate `p`.
  * If `p` evaluates to true, element is kicked out. */
 template<typename T, typename Predicate>
-void Erase(std::vector<T>& v, Predicate p)
-	noexcept (
-		   std::is_nothrow_invocable_v<Predicate&, T&>
-		&& std::is_nothrow_move_assignable_v<T>
-		&& std::is_nothrow_destructible_v<T>
-	) /*^^^ I guess...? How else to check if the underlying block is noexcept? */
-{
+void Erase(std::vector<T>& v, Predicate p) {
 	v.erase(std::remove_if(v.begin(), v.end(), std::move(p)), v.end());
 }
 
 /* ------------------------- */
 template<typename T>
-constexpr T rround(double x) noexcept { return static_cast<T>(x + 0.5); }
+constexpr T rround(double x) noexcept {
+	const double d = (x < 0)? -0.5: 0.5;
+	return static_cast<T>(x + d);
+}
 
 /* Predicate if the value is inside a range spanned by last 2 elements of some array. */
 template<typename T, typename U, std::size_t N>
@@ -638,14 +642,29 @@ enum class BinaryOpt : i32 { No = 0, Yes = 1 };
  */
 template<typename Visitor, typename Var>
 decltype(auto) visit_non_empty(Visitor&& vs, Var&& /* Variant&& */ var) {
+	using V = std::remove_cv_t<std::remove_reference_t<Var>>;;
+	static_assert( std::variant_size_v<V> >= 2,
+		"Second type must be an std::variant<...> with at least 2 fields.");
+	static_assert(std::is_same_v<std::variant_alternative_t<0, V>, Empty>,
+		"Expected Empty as the first alternative.");
+	static_assert(!std::is_same_v<std::variant_alternative_t<1, V>, Empty>,
+		"Expected a non-Empty payload at index 1.");
+
+	using R = std::invoke_result_t<
+		Visitor&&,
+		decltype(std::get<1>(std::forward<Var>(var)))
+	>;
 	return std::visit (
-		[&](auto&& value) -> decltype(auto) {
+		[&](auto&& value) -> R {
 			using T = std::decay_t<decltype(value)>;
 			if constexpr(std::is_same_v<T, Empty>)
 				throw std::runtime_error("mnd::visit_non_empty except: `Empty` type encountered.");
-			else
+			else {
+				static_assert(std::is_same_v<R, std::invoke_result_t<Visitor&&, decltype(value)>>,
+					"Visitor must return the same type for every payload alternative.");
 				return std::invoke(std::forward<Visitor>(vs),
 					std::forward<decltype(value)>(value));
+			}
 		},
 		std::forward<Var>(var)
 	);
@@ -719,10 +738,16 @@ using remove_cvref_t = typename remove_cvref<T>::type;
 
 template<typename T>
 struct is_an_array : std::false_type {};
-template<typename T, size_t N>
-struct is_an_array<T[N]> : std::true_type { using underlying_type = T; static constexpr size_t size = N; };
-template<typename T, size_t N>
-struct is_an_array<std::array<T,N>> : std::true_type { using underlying_type = T; static constexpr size_t size = N; };
+template<typename T, std::size_t N>
+struct is_an_array<T[N]> : std::true_type {
+	using underlying_type = T;
+	static constexpr std::size_t size = N; 
+};
+template<typename T, std::size_t N>
+struct is_an_array<std::array<T,N>> : std::true_type {
+	using underlying_type = T;
+	static constexpr std::size_t size = N;
+};
 template<typename T>
 constexpr bool is_an_array_v = is_an_array<T>::value;
 
@@ -818,7 +843,7 @@ template<typename T, typename = void>
 struct has_set_directory : std::false_type {};
 template<typename T>
 struct has_set_directory<T, std::void_t<
-	decltype( std::declval<const T&>().SetDirectory( std::declval<const char*>() ) )
+	decltype( std::declval<T&>().SetDirectory(nullptr) )
 >> : std::true_type {};
 
 template<typename T, typename = void>
@@ -995,17 +1020,30 @@ template<typename T,
 		return std::filesystem::path(std::forward<T>(arg)).string();
 }
 
+/* The mnd::median returns by *value*, as is normally used with basic arithmetic
+ * types. For custom types that have defined operators it will also work, but the
+ * noexcept specifier might be an overkill... */
 template<typename T,
 	typename U = remove_cvref_t<T>,
 	std::size_t N = is_an_array<U>::size,
 	char(*)[N % 2] = nullptr
-> constexpr auto median(const T& sorted_arr) noexcept { return sorted_arr[N/2]; }
+> constexpr auto median(const T& sorted_arr) noexcept(
+	std::is_arithmetic_v<typename is_an_array<U>::underlying_type>
+) {
+	return sorted_arr[N/2];
+}
 
+/* Assume it doesn't overflow. */
 template<typename T,
 	typename U = remove_cvref_t<T>,
 	std::size_t N = is_an_array<U>::size,
 	char(*)[!(N % 2)] = nullptr
-> constexpr auto median(const T& sorted_arr) noexcept { return ( sorted_arr[N/2] + sorted_arr[N/2 - 1] ) / 2; }
+> constexpr auto median(const T& sorted_arr) noexcept(
+	std::is_arithmetic_v<typename is_an_array<U>::underlying_type>
+) {
+	static_assert(N > 0, "mnd::median requires a nonempty array.");
+	return (sorted_arr[N/2] + sorted_arr[N/2 - 1]) / 2;
+}
 
 template<typename T, typename... Ts>
 constexpr auto min(T t, Ts... ts) noexcept {
@@ -1037,10 +1075,12 @@ constexpr auto max(T t, Ts... ts) noexcept {
 }
 template<typename T,
 	typename U = remove_cvref_t<T>
-> constexpr int FindIndex(const T& arr, const typename is_an_array<U>::underlying_type& val) noexcept {
+> constexpr int FindIndex(const T& arr, const typename is_an_array<U>::underlying_type& val) noexcept(
+	noexcept(static_cast<bool>(arr[0] == val))
+) {
 	static_assert(is_an_array_v<U>, "Type T must be a C-style array or \'std::array<T,N>\'");
 	constexpr std::size_t N = is_an_array<U>::size;
-	for(size_t i=0; i < N; ++i)
+	for(std::size_t i=0; i < N; ++i)
 		if(arr[i] == val) return i;
 	return -1;
 }
@@ -1221,21 +1261,28 @@ template <
 	/* Non-optimized, Eigen maybe has a tiny bit better optimized variance estimated.
 	 * For numeric stability, we do two passes, finding the arithmetic value first.
 	 * In our cases, arrays are usually small - order of 4-20. Two passes don't hurt performance. */
-	constexpr size_t N = mnd::len<Arr>();	
-	const double mu = mnd::mean<U,double>(arr);
-	double result = 0.0;
-	if constexpr(U == Unroll::No) {
-		for(const T& item: arr) {
-			double d = static_cast<double>(item) - mu;
-			result += d*d;
-		}
-	} else {
-		static_for_each(arr, [mu, &result](const T& item) {
-			double d = static_cast<double>(item) - mu;
-			result += d*d;
-		});
+	constexpr std::size_t N = mnd::len<Arr>();	
+	if constexpr(N == 0) {
+		return {NAN, NAN};
+	} else if constexpr(N == 1) {
+		return {static_cast<double>(arr[0]), NAN};
 	}
-	return {mu, result / (N - 1)};
+	else {
+		const double mu = mnd::mean<U,double>(arr);
+		double result = 0.0;
+		if constexpr(U == Unroll::No) {
+			for(const T& item: arr) {
+				double d = static_cast<double>(item) - mu;
+				result += d*d;
+			}
+		} else {
+			static_for_each(arr, [mu, &result](const T& item) {
+				double d = static_cast<double>(item) - mu;
+				result += d*d;
+			});
+		}
+		return {mu, result / (N - 1)}; // Can be a quiet-NAN
+	}
 }
 
 /* SFINAE'd away for arrays. Previous overload wins. */
@@ -1344,6 +1391,36 @@ template<
 	);
 }
 
+/* Returns the name of the type passed, also adding
+ * ref-cv qualifiers. Demangles templated types, too :-) */
+template<typename T>
+MND_NEVER_INLINE std::string type_name() {
+	using U = std::remove_reference_t<T>;
+
+	std::unique_ptr<char, void(*)(void*)> own(
+#ifndef _MSC_VER
+		abi::__cxa_demangle(typeid(U).name(), nullptr,
+			nullptr, nullptr),
+#else
+		nullptr,
+#endif
+		std::free
+	);
+	std::string r = (own) ? own.get() : typeid(U).name();
+	if constexpr(std::is_const_v<U>)
+		r += " const";
+	if constexpr(std::is_volatile_v<U>)
+		r += " volatile";
+	if constexpr(std::is_lvalue_reference_v<T>)
+		r += "&";
+	else if constexpr(std::is_rvalue_reference_v<T>)
+		r += "&&";
+	return r;
+}
+
+#define _SELF_TYPE_CSTR \
+	::mnd::type_name<typename ::mnd::remove_cvref<decltype(*this)>::type>().c_str()
+
 namespace fmt {
 namespace detail {
 
@@ -1405,6 +1482,12 @@ std::ostream& operator<<(std::ostream&, const std::priority_queue<T, Container, 
 template<typename T>
 std::ostream& operator<<(std::ostream&, mnd::span<T>);
 
+/* Tuple+pair */
+template<typename... Ts>
+std::ostream& operator<<(std::ostream& , const std::tuple<Ts...>& );
+template<typename T1, typename T2>
+std::ostream& operator<<(std::ostream& , const std::pair<T1,T2>& );
+
 namespace detail {
 
 template<bool Keyed, typename Iterator>
@@ -1456,6 +1539,34 @@ std::ostream& output_adaptor(
 	return os << ']';
 }
 
+/* Format tuple elements with indices [first, last>. Handles nested tuples, too! */
+template<typename... Ts>
+std::ostream& print_tuple(
+	std::ostream& os,
+	const std::tuple<Ts...>& tup,
+	std::size_t first = 0,            // first index to print
+	std::size_t last  = sizeof...(Ts) // first-after-last index to print.
+) {
+	using Tuple = std::tuple<Ts...>;
+	constexpr std::size_t N = sizeof...(Ts);
+
+	if(first > last || last > N)
+		ERROR("Invalid tuple '%s' print range? Requested [%zu, %zu>\n",
+			mnd::type_name<Tuple>().c_str(), first, last);
+
+	os << '[';
+
+	mnd::static_for<0, N>([&](auto I) {
+		constexpr std::size_t i = decltype(I)::value;
+
+		if(i >= first && i < last) {
+			if(i != first) os << ", ";
+			os << std::get<i>(tup);
+		}
+	});
+	return os << ']';
+}
+
 } // namespace detail
 
 template<typename Range,
@@ -1504,6 +1615,15 @@ std::ostream& operator<<(
 	);
 }
 
+template<typename... Ts>
+std::ostream& operator<<(std::ostream& os, const std::tuple<Ts...>& tup) {
+	return detail::print_tuple(os, tup);
+}
+template<typename T1, typename T2>
+std::ostream& operator<<(std::ostream& os, const std::pair<T1,T2>& p) {
+	return os << '[' << p.first << ", " << p.second << ']';
+}
+
 } // namespace fmt
 using fmt::operator<<;
 
@@ -1524,35 +1644,6 @@ std::string sstrcat(Args&&... args) {
 	(oss << ... << std::forward<Args>(args));
 	return oss.str();
 }
-
-/* Returns the name of the type passed, also adding
- * ref-cv qualifiers. Demangles templated types, too :-) */
-template<typename T,
-	typename U = std::decay_t<T>	
-> MND_NEVER_INLINE std::string type_name() {
-	std::unique_ptr<char, void(*)(void*)> own(
-#ifndef _MSC_VER
-		abi::__cxa_demangle(typeid(U).name(), nullptr,
-			nullptr, nullptr),
-#else
-		nullptr,
-#endif
-		std::free
-	);
-	std::string r = (own) ? own.get() : typeid(U).name();
-	if constexpr(std::is_const_v<T>)
-		r += " const";
-	if constexpr(std::is_volatile_v<T>)
-		r += " volatile";
-	if constexpr(std::is_lvalue_reference_v<T>)
-		r += "&";
-	else if constexpr(std::is_rvalue_reference_v<T>)
-		r += "&&";
-	return r;
-}
-
-#define _SELF_TYPE_CSTR \
-	::mnd::type_name<typename ::mnd::remove_cvref<decltype(*this)>::type>().c_str()
 
 /* Sometimes cursor can be hidden mid execution,
  * if the program dies due to a system signal,
@@ -1583,8 +1674,8 @@ constexpr std::size_t CL =
 
 struct TOnceBase {
 	TOnceBase() { TH1::AddDirectory(kFALSE); }
-	TOnceBase(const char* name)  : _name(name) {}
-	TOnceBase(std::string name) : _name(std::move(name)) {}
+	TOnceBase(const char* name) : _name(name) { TH1::AddDirectory(kFALSE); }
+	TOnceBase(std::string name) : _name(std::move(name)) { TH1::AddDirectory(kFALSE); }
 
 	TOnceBase(const TOnceBase& ) = default;
 	TOnceBase& operator=(const TOnceBase& ) = default;
@@ -1710,7 +1801,7 @@ public:
 				else if(il.size() == _internal.size())
 					std::copy(il.begin(), il.end(), _internal.begin());
 				else
-					assert(il.size() == _internal.size() && "Initializer list for std::array<T,N> must have either 0, 1 or N members");
+					ERROR("Initializer list for std::array<T,N> must have either 0, 1 or N members");
 			}
 			else static_assert(std::is_constructible_v<U, std::initializer_list<typename U::value_type>>,
 				"Type doesn't correctly support initializer lists ctor.");
@@ -1815,6 +1906,11 @@ public:
 			copy = std::make_unique<TOnce<T>>(*this);
 		}
 		else if constexpr(std::is_copy_assignable_v<T>) {
+			if constexpr(!std::is_default_constructible_v<T>) {
+				static_assert(mnd::always_false_v<T>,
+				  "Type T isn't copy constructible, is copy assignable, but not default constructible?");
+			}
+			copy = std::make_unique<TOnce<T>>(this->GetName());
 			copy->_internal = _internal;
 		}
 		else {
@@ -1938,7 +2034,10 @@ void Add(std::array<T, N>& lhs, const std::array<T, N>& rhs) {
 			lhs[i] /= 2;
 		}
 		else {
-			static_assert(mnd::always_false_v<T>, "Underlying type `T` isn't addable by MONAD policy.");
+			ERROR("Underlying type '%s' has no automatic collection policy. "
+				"Provide an explicit collector for the enclosing object.",
+				mnd::type_name<T>().c_str()
+			);
 		}
 	}
 }
@@ -1966,7 +2065,10 @@ void Add(std::vector<T>& lhs, const std::vector<T>& rhs) {
 			lhs[i] /= 2;
 		}
 		else {
-			static_assert(mnd::always_false_v<T>, "Underlying type `T` isn't addable by MONAD policy.");
+			ERROR("Underlying type '%s' has no automatic collection policy. "
+				"Provide an explicit collector for the enclosing object.",
+				mnd::type_name<T>().c_str()
+			);
 		}
 	}
 }
@@ -2074,11 +2176,25 @@ public:
 
 	template<typename U>
 	[[nodiscard]] U* RegisterObject(const char* name, void (*fn)(U&, const U&), std::initializer_list<typename U::value_type> il) {
-		U* obj = this->template RegisterObject<U>(name, il);
-		TOnce<U>* wrapped_obj = static_cast<TOnce<U>*>( _vc.back().get() );	
-		wrapped_obj->_collector = fn;
+		/* Flag the owned object with `CONTAINERNAME_` prefix. */
+		std::string obj_name = mnd::sstrcat(this->GetName(), "_", name);
+		for(auto& o : _vc) {
+			if(strcmp(o->GetName(), obj_name.c_str()) == 0) {
+				TOnce<U> *dcast = dynamic_cast<TOnce<U>*>( o.get() );
+				if(!dcast)
+					ERROR("Attempted to retrieve object named '%s' from %zu-sized list of owned TOnce<..> objects."
+						"Found at address 0x%lx a 'TOnceBase' but dynamic_cast failed? Same object registered multiple times? (%s)",
+						name, _vc.size(), (uintptr_t)o.get(), _SELF_TYPE_CSTR);	
+				return dcast->operator->(); // First registered object sets the collector
+			};
+		}
+		
+		std::shared_ptr<TOnce<U>> obj = std::make_shared<TOnce<U>>(obj_name.c_str(), il);
+		TOnce<U>* p = obj.get();
+		p->_collector = fn;
 
-		return obj;
+		_vc.push_back( std::move(obj) );
+		return p->operator->();
 	}
 
 	template<typename U, typename... Ts>
@@ -2149,7 +2265,7 @@ struct TRawContainer : TContainerBase {
 	using inner_type = T;
 
 private:
-	T* _inner;
+	T* _inner = nullptr;
 
 public:
 	TRawContainer() = default;
@@ -2276,15 +2392,16 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 	
 	/* Identical logic for copy-assignment op */
 	TProcessor& operator=(const TProcessor& rhs) {
-		this->in = rhs.in;
-		this->out = rhs.out;
-		this->out._vc.clear();
-		
-		for(const std::shared_ptr<TOnceBase>& v  : rhs.out._vc)
-			out._vc.emplace_back( v->Clone() );
-		
-		out.Setup();
-
+		if(this != &rhs) {
+			this->in = rhs.in;
+			this->out = rhs.out;
+			this->out._vc.clear();
+			
+			for(const std::shared_ptr<TOnceBase>& v  : rhs.out._vc)
+				out._vc.emplace_back( v->Clone() );
+			
+			out.Setup();
+		}
 		return *this;
 	}
 
@@ -2428,7 +2545,7 @@ inline std::unordered_set<std::string> g_loaded_containers {};
 struct InputFileInfo_ {
 private:
 	std::string full_path_;
-	size_t filename_offset_ = 0;
+	std::size_t filename_offset_ = 0;
 
 public:
 	/* It's possible that the input file got passed relatively, or thru a symlink.
@@ -2449,7 +2566,7 @@ public:
 				resolved.string().c_str());
 		}
 
-		const size_t filename_size = resolved.filename().string().size();
+		const std::size_t filename_size = resolved.filename().string().size();
 		auto full = resolved.string();
 
 		this->filename_offset_ = full.size() - filename_size;
@@ -2493,7 +2610,7 @@ struct alignas(mnd::CL) TAnalysisProcess final {
 		"All the inderlying subprocess types <Ts> need move assignment op.");
 
 	template<u32, typename...> friend struct TAnalysisPool;
-	static constexpr size_t Size() { return sizeof...(Ts); }
+	static constexpr std::size_t Size() { return sizeof...(Ts); }
 
 private:
 	mnd::JobQueue q;
@@ -2508,10 +2625,10 @@ private:
 	mnd::PerThreadWriter writer;
 	
 private:
-	template<size_t I>
+	template<std::size_t I>
 	using base_t = std::tuple_element_t<I, decltype(_proc)>;
 
-	template<size_t I>
+	template<std::size_t I>
 	static TProcessorBase* get_at(TAnalysisProcess* self) noexcept {
 		return static_cast<TProcessorBase*>(&std::get<I>(self->_proc));
 	}
@@ -2651,7 +2768,7 @@ public:
 		return static_cast<const base_t<I>*>(&std::get<I>(_proc));
 	}
 	// Runtime version, can throw.
-	TProcessorBase* GetProcess(size_t i) {
+	TProcessorBase* GetProcess(std::size_t i) {
 		if(i >= Size()) ERROR("Request for worker index outside of the tuple size.");
 		static constexpr auto table = make_getter_table(std::make_index_sequence<Size()>{});
 
@@ -2663,13 +2780,13 @@ public:
 	 */
 	std::array<TProcessorBase*, Size()> GetProcesses() {
 		std::array<TProcessorBase*, Size()> rv{};
-		for(size_t i=0; i<Size(); ++i)
+		for(std::size_t i=0; i<Size(); ++i)
 			rv[i] = this->GetProcess(i);
 		return rv;
 	}
 
 	Int_t GetEntry(Long64_t entry) const noexcept {
-		if(mnd::IsEmpty(reader))
+		if( MND_UNLIKELY(mnd::IsEmpty(reader)) )
 			ERROR("Empty input TTree/RNTuple. Invalid");
 		else if(std::holds_alternative<mnd::RNPerThreadReader>(reader)) {
 			std::get<mnd::RNPerThreadReader>(reader)
@@ -2683,7 +2800,7 @@ public:
 	}
 
 	u64 GetEntries() const noexcept {
-		if(mnd::IsEmpty(reader))
+		if( MND_UNLIKELY(mnd::IsEmpty(reader)) )
 			ERROR("Empty input TTree/RNTuple in GetEntries call. Invalid");
 		else if(std::holds_alternative<mnd::RNPerThreadReader>(reader)) {
 			return static_cast<u64>( std::get <
@@ -2989,11 +3106,10 @@ private:
 				base->Load( f.get() );
 		}
 
-		 /* When the clones are created, they will just share the pointer to these objects.
+		/* When the clones are created, they will just share the pointer to these objects.
 		 * Namely, each thread has a view over the object to conserve memory.
-		 * These objects aren't really flagged as const, and users should abhold this 'contract' */
-
-		/* It does re-open a ROOT file, but this is done on order of ~10 times, which is insignificant overhead
+		 * These objects aren't really flagged as const, and users should abhold this 'contract'
+		 * It does re-open a ROOT file, but this is done on order of ~10 times, which is insignificant overhead
 		 * in the setup,.. maybe a fix for later? Probably will need a big overhaul to move to expression template-style TAnalysisProcess.. */
 	}
 
@@ -3030,7 +3146,8 @@ template <
 		if(N > POOL_MAX_THREADS_)
 			WARN("TAnalysisProcess template instantiated with capacity %d, which is over-the-top capacity %d. "
 				"Is fine if was compiled on machine X and running on machine Y.", N, POOL_MAX_THREADS_);
-		assert((NSlice > 63) &&  "TAnalysisProcess constructor parameter [2] (slice size) must be bigger than 63 to be efficient.");
+		if(NSlice < 64)
+			ERROR("TAnalysisProcess constructor parameter [2] (slice size) must be bigger than 63 to be efficient.");
 		
 		pool[0] = std::move(base);
 		pool[0].Setup();
@@ -3084,6 +3201,7 @@ template <
 	 */
 	void Write() {
 		if( _is_written) return;
+		if(!_is_collected) Collect();
 
 		/* Writing out the types for clarity. */
 		TAnalysisProcess<Processors...>& process = Ref();
@@ -3200,14 +3318,15 @@ template <
 #endif
 			}
 #ifdef __HAS_INDICATORS
-			mnd::PrintProgress(bar, j.last-1, nentries-1, NSlice);
+			mnd::PrintProgress(bar, j.last-1, nentries, NSlice);
 #endif
 		}
 
 		Stop();
 
 #ifdef __HAS_INDICATORS
-		bar.mark_as_completed();
+		if(!bar.is_completed())
+			bar.set_progress(100);
 		indicators::show_console_cursor(true);
 #endif
 
@@ -3234,15 +3353,15 @@ private:
 
 	template<typename T>
 	void dyadic_fold(std::vector<T*>&& v) {
-		size_t Nv = v.size();
+	std::size_t Nv = v.size();
 		if(Nv & (Nv-1)) ERROR("Dyadic fold container size ill-formed, is %zu, but should be power of 2.", Nv);
 
 		if(Nv == 1) return;
 		
-		const size_t half = Nv / 2;
+		const std::size_t half = Nv / 2;
 		std::vector<T*> next(half);
 
-		for(size_t i=0; i<half; ++i) {
+		for(std::size_t i=0; i<half; ++i) {
 			v[ 2*i ] -> Collect( (const T&)(*v[2*i + 1]) );
 			next[i] = v[2*i];
 		}
@@ -3275,7 +3394,7 @@ struct TAnalysisPool<1, Processors...> final {
 	}
 
 	/* On destructor sweep, write the single objects directly in the file. */
-	~TAnalysisPool() { Collect(); Write(); }
+	~TAnalysisPool() { Collect(); Write(); mnd::g_loaded_containers.clear(); }
 	
 	void Collect() {}
 
@@ -3371,7 +3490,7 @@ struct TAnalysisPool<1, Processors...> final {
 			process.GetEntry( static_cast<Long64_t>(evId) );
 
 #ifdef __HAS_INDICATORS
-			mnd::PrintProgress(bar, evId, nentries-1, n_print_every);
+			mnd::PrintProgress(bar, evId, nentries, n_print_every);
 #endif
 			std::apply([](auto&... ps) {
 					(..., ps.ProcessEntry());
@@ -3381,7 +3500,8 @@ struct TAnalysisPool<1, Processors...> final {
 		}
 
 #ifdef __HAS_INDICATORS
-		bar.mark_as_completed();
+		if(!bar.is_completed())
+			bar.set_progress(100);
 		indicators::show_console_cursor(true);
 #endif
 
