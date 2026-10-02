@@ -33,6 +33,7 @@
 #include <string>
 #include <chrono>
 #include <sstream>
+#include <memory>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -745,6 +746,83 @@ template<typename T>
 using remove_cvref_t = typename remove_cvref<T>::type;
 
 #endif // __cplusplus >= 202002L
+
+/* This type is used for situations where some
+ * intermediate calculation of type `T` needs to be computed once and then cached.
+ * Subsequent accesses are concurrently possible though a mutable variable.
+ * And only once, usually at init time (or through a requested reset), it gets updated. */
+template<typename T>
+struct cache {
+	static_assert(std::is_default_constructible<T>::value, "Type T trait mismatch (0)");
+	static_assert(std::is_copy_constructible<T>::value, "Type T trait mismatch (1)");
+	static_assert(std::is_move_constructible<T>::value, "Type T trait mismatch (2)");
+	static_assert(std::is_copy_assignable<T>::value, "Type T trait mismatch (3)");
+	static_assert(std::is_move_assignable<T>::value, "Type T trait mismatch (4)");
+	static_assert(std::is_same<T, typename std::remove_cv<T>::type>::value, "Type T trait mismatch (5)");
+
+	std::atomic<bool> initialized{false};
+	T value{};
+
+	cache() = default;
+	cache(const cache& rhs) noexcept(std::is_nothrow_copy_constructible<T>::value)
+		: initialized(false), value(rhs.value)
+	{
+		initialized.store(
+			rhs.initialized.load(std::memory_order_relaxed),
+			std::memory_order_relaxed
+		);
+	}
+	cache& operator=(const cache& rhs) noexcept(std::is_nothrow_copy_assignable<T>::value)
+	{
+		if(this == &rhs)
+			return *this;
+		
+		initialized.store(false, std::memory_order_relaxed);
+		value = rhs.value;
+		initialized.store(
+			rhs.initialized.load(std::memory_order_relaxed),
+			std::memory_order_relaxed
+		);
+		return *this;
+	}
+	cache(cache&& rhs) noexcept(std::is_nothrow_move_constructible<T>::value)
+		: initialized(false), value(std::move(rhs.value))
+	{
+		initialized.store(
+			rhs.initialized.exchange(false, std::memory_order_relaxed),
+			std::memory_order_relaxed
+		);
+	}
+	
+	cache& operator=(cache&& rhs) noexcept(std::is_nothrow_move_assignable<T>::value)
+	{
+		if(this == &rhs)
+			return *this;
+
+		initialized.store(false, std::memory_order_relaxed);
+		const bool ready =
+			rhs.initialized.exchange(false, std::memory_order_relaxed);
+
+		value = std::move(rhs.value);
+		initialized.store(ready, std::memory_order_relaxed);
+		return *this;
+	}
+	~cache() = default;
+
+	bool load_acq() const noexcept {
+		return initialized.load(std::memory_order_acquire); }
+	bool load() const noexcept {
+		return initialized.load(std::memory_order_relaxed); }
+	void publish(bool value) noexcept {
+		initialized.store(value, std::memory_order_release); }
+	void reset() noexcept { publish(false); }
+
+	/* Quick lookup, does not care about the atomic readiness flag. */
+	T& operator*()              noexcept { return value; }
+	const T& operator*()  const noexcept { return value; }
+	T* operator->()             noexcept { return std::addressof(value); }
+	const T* operator->() const noexcept { return std::addressof(value); }
+};
 
 template<typename T>
 struct is_an_array : std::false_type {};
