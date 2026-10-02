@@ -400,8 +400,8 @@ void Add(std::vector<T>& lhs, const std::vector<T>& rhs);
 #elif __has_include("boost/beast/core/span.hpp")
 #	include "boost/beast/core/span.hpp"
 	namespace mnd {
-		    template<typename T>
-			using span = boost::beast::span<T>;
+		template<typename T>
+		using span = boost::beast::span<T>;
 	}
 #else
 #	error "Neither C++20 given, nor boost span library for found. Cannot proceed."
@@ -705,10 +705,12 @@ using jthread = std::jthread;
 
 #else
 
+/* Copy-pasta from https://github.com/josuttis/jthread/blob/master/source/jthread.hpp */
 class jthread {
 public:
 	template<typename F, typename... Args>
-	explicit jthread(F&& f, Args&&... args)
+	explicit jthread(F&& f, Args&&... args,
+		typename std::enable_if_t<!std::is_same_v<std::decay_t<F>, jthread>>* = nullptr)
 		: t_(std::forward<F>(f), std::forward<Args>(args)...)
 		{}
 
@@ -718,7 +720,15 @@ public:
 	}
 
 	jthread(jthread&&) noexcept = default;
-	jthread& operator=(jthread&&) noexcept = default;
+	jthread& operator=(jthread&& rhs) noexcept {
+		if(this != &rhs) {
+			if(t_.joinable())
+				t_.join();
+
+			t_ = std::move(rhs.t_);
+		}
+		return *this;
+	}
 
 	jthread(const jthread&) = delete;
 	jthread& operator=(const jthread&) = delete;
