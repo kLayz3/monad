@@ -560,6 +560,38 @@ constexpr double clamp(const T& value, const std::array<T,2>& bounds) noexcept(
 	     : (bounds[1] < value) ? bounds[1]: value;
 }
 
+namespace detail {
+template<typename Ordering>
+constexpr bool is_ordered(Ordering&& )  noexcept { return true; }
+template<typename Ordering, typename T>
+constexpr bool is_ordered(Ordering&& , T&& ) noexcept { return true; }
+
+template<typename Ordering, typename T, typename U, typename... Rest>
+constexpr bool is_ordered(Ordering&& o, T&& a0, U&& a1, Rest&&... rest) {
+    return ( o(std::forward<T>(a0), a1) )
+        && is_ordered(o, std::forward<U>(a1), std::forward<Rest>(rest)...);
+}
+}; // namespace detail
+
+/* Check that a sequence of arguments: a0,a1,a2,... aN is strictly ascending:
+ * a0 < a1 < a2 < ... < aN */
+template<typename... Ts>
+constexpr bool is_strictly_ascending(Ts&&... ts) {
+    return detail::is_ordered(
+        [](const auto& lhs, const auto& rhs) -> bool { return lhs < rhs; },
+        std::forward<Ts>(ts)...
+    );
+}
+/* Check that a sequence of arguments: a0,a1,a2,... aN is strictly ascending:
+ * a0 > a1 > a2 > ... > aN */
+template<typename... Ts>
+constexpr bool is_strictly_descending(Ts&&... ts) {
+    return detail::is_ordered(
+        [](const auto& lhs, const auto& rhs) -> bool { return lhs > rhs; },
+        std::forward<Ts>(ts)...
+    );
+}
+
 struct TimePoint {
 	std::chrono::high_resolution_clock::time_point t;
 	std::string tag;
@@ -706,7 +738,7 @@ using jthread = std::jthread;
 
 #else
 
-/* Copy-pasta from https://github.com/josuttis/jthread/blob/master/source/jthread.hpp */
+/* https://github.com/josuttis/jthread/blob/master/source/jthread.hpp */
 class jthread {
 public:
 	template<typename F, typename... Args>
@@ -749,8 +781,9 @@ using remove_cvref_t = typename remove_cvref<T>::type;
 
 /* This type is used for situations where some
  * intermediate calculation of type `T` needs to be computed once and then cached.
- * Subsequent accesses are concurrently possible though a mutable variable.
- * And only once, usually at init time (or through a requested reset), it gets updated. */
+ * Subsequent read-accesses are possible though a mutable variable. And they do not block.
+ * Only once, usually at init time (or through a requested reset), the underlying value gets updated,
+ * and this is a true atomic operation. */
 template<typename T>
 struct cache {
 	static_assert(std::is_default_constructible<T>::value, "Type T trait mismatch (0)");
@@ -1480,7 +1513,11 @@ template<
 }
 
 /* Returns the name of the type passed, also adding
- * ref-cv qualifiers. Demangles templated types, too :-) */
+ * ref-cv qualifiers. Demangles templated types, too :-)
+ * To print type of an entity `a`, just do:
+ *   mnd::type_name<decltype(a)>();
+ * This works only for entities, not for expressions!
+ * https://en.cppreference.com/cpp/language/decltype §1 */
 template<typename T>
 MND_NEVER_INLINE std::string type_name() {
 	using U = std::remove_reference_t<T>;

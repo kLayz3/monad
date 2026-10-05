@@ -410,8 +410,9 @@ Any STL- container of underlying type `Foo` for which there exists a defined unq
 `std::ostream& operator<<(std::ostream&, Foo const&)` function, can be directly formatted. Unqualified means
 that the free function is defined either as a hidden friend, in the targeted type's namespace, or in the
 global namespace.
-To not conflict with other libs or users' own rolled functions, the MONAD's formatter needs 
-to be marked for unqualified lookup, as explained in the `common.mk` file.
+To not conflict with other libs or users' own rolled functions, the MONAD's formatter needs
+to be marked for unqualified lookup, as explained in the `common.mk` file. In either case,
+one can still access these formatters via: `template<typename T> auto mnd::streamable(const T&) -> std::string`.
 
 ### Compile-time loop unrolling
 For hot performance-critical loops, one can utilise `mnd::static_for` and `mnd::static_for_each`
@@ -465,8 +466,10 @@ Output container does not have to have the same underlying type as the input con
 can be used even in a constant expression contexts:
 ```
 constexpr std::array a{2,3,4,5};
-constexpr auto b = mnd::map(a, [](auto x) { return std::array{ (static_cast<double>)(x*x) }; });
-std::cout << b << std::endl; // [[4.0], [9.0], [16.0], [25.0]]
+constexpr auto b = mnd::map(a, [](auto x) { return std::array{ static_cast<double>(x*x) }; });
+std::cout << b << '\n' << mnd::type_name<decltype(b)>() << '\n';
+// [[4], [9], [16], [25]]
+// std::array<std::array<double, 1ul>, 4ul> const
 ```
 
 ## Complete type lookup
