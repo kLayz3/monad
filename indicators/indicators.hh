@@ -33,7 +33,14 @@ inline Color next_col() noexcept {
 	}
 }
 inline Color rand_col() noexcept {
-	int x = rand();
+	const uint32_t curr_col = /* 0,1,2,3,4,5 */
+		(uint32_t)n_col_curr.load(std::memory_order_relaxed) % 6;
+	uint32_t x ;
+	while(x = static_cast<uint32_t>(rand()) % 6,
+		x == curr_col) {}
+
+	n_col_curr.store(x+1, std::memory_order_relaxed);
+
 	switch(x % 6) {
 		case 0:  return Color::red;
 		case 1:  return Color::green;

@@ -433,11 +433,12 @@ Another example:
 ```
 std::array a{2,3,4,5};
 std::array<int,4> b{};
-mnd::static_for_each(arr, [&b](auto I) {
-  constexpr std::size_t i = decltype(I)::value;
-  b[i] = a[i] * a[i];
-}
+auto iter = std::begin(b);
+mnd::static_for_each(arr, [&iter](auto val) {
+  *iter++ = val*val;
+});
 std::cout << b << std::endl; // [4, 9, 16, 25]
+assert(iter == std::end(b));
 ```
 
 
@@ -472,9 +473,10 @@ std::cout << b << '\n' << mnd::type_name<decltype(b)>() << '\n';
 // std::array<std::array<double, 1ul>, 4ul> const
 ```
 
-## Complete type lookup
-`template<typename T> std::string type_name()` returns the complete name of a type `T`, with
-associated ref and const/volatile qualifiers.
+## Type name lookup
+`template<typename T> std::string type_name()` returns the demangled name of a type `T`, with
+associated ref and const/volatile qualifiers. Due to C++17 semantics, it cannot be (yet) used at
+compile time. To access the type name of a named entity `a`, use `mnd::type_name<decltype(a)>()`.
 
 ## Arithmetic operations
 These are straightforward to implement, and only accept arithmetic types (via `std::is_arithmetic` type-trait):
@@ -493,6 +495,51 @@ std::cout << mnd::sum(a) << ", "
 // 19, 19.0, 9, 9.5, 3
 ```
 
+## Thread-safe read-only container with cached values
+Suppose that a reference of some parameter `const Foo&` is given off to multiple concurrent threads.
+Plain reading from the reference is generally thread-safe, unless the type has mutable members.
+To make the entire type read- thread-safe, wrap the mutable members of type `Bar`
+into `mutable mnd::cache<Bar>`, together with a small blocking API (e.g., a simple `std::mutex`).
+Concretely; suppose we have a polynomial type that is a parameter, e.g., its coefficients
+get parsed from some file, or are inputted or calculated before the main entry-loop.
+```
+struct Polynomial {
+	using roots_t = std::vector<std::complex>;
+	
+	std::vector<double> coefficients;
+	
+	const roots_t& GetRoots() const {
+		if (MND_UNLIKELY(!roots_.load_acq()) ) {
+			Init();
+		}
+		return roots_.value;
+	}
+
+private:
+	/* Expensive and slow function: */
+	void FindRoots() const { /* ... */ }
+
+	void Init() const {
+		auto lock = std::lock_guard{mtx_};
+
+		// Another thread may have initialized it while waiting ...
+		if (roots_.load() == true) return;
+	
+		FindRoots();
+	
+		roots_.publish(true);
+	}
+	mutable mnd::cache<roots_t> roots_;
+	
+	/* Mutex either per-instance or per-type.
+	 * As it suits you... */
+	/* inline static */ std::mutex mtx_{};
+}
+```
+In the example above, the method `Polynomial::GetRoots()` is thread-safe to call in a concurrent environments,
+and the boolean check is branch-predicted and optimized out.
+The template `mnd::cache<T>` is guaranteed to be [semiregular](https://en.cppreference.com/cpp/concepts/semiregular)
+and requires the underlying type to be semiregular and non-const/volatile as well.
 
 ## Example of usage <a name="phd"></a>
 Broad usage of MONAD is in [author's PhD analysis code](https://git.gsi.de/m.bajzek/sec-s118).

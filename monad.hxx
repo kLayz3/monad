@@ -540,8 +540,9 @@ constexpr bool IsValid(const std::array<T,N>& bounds) noexcept {
 	return std::isfinite(bounds[N-2]) and std::isfinite(bounds[N-1]);
 }
 
+/* All argument must be finite to pass the predicate. */
 template<typename... Ts>
-constexpr bool isfinite(Ts&&... ts) noexcept { /* All must pass the predicate. */
+constexpr bool isfinite(Ts&&... ts) noexcept { 
 	static_assert(
 		(std::is_arithmetic_v<
 			std::remove_reference_t<Ts>
@@ -791,7 +792,8 @@ struct cache {
 	static_assert(std::is_move_constructible<T>::value, "Type T trait mismatch (2)");
 	static_assert(std::is_copy_assignable<T>::value, "Type T trait mismatch (3)");
 	static_assert(std::is_move_assignable<T>::value, "Type T trait mismatch (4)");
-	static_assert(std::is_same<T, typename std::remove_cv<T>::type>::value, "Type T trait mismatch (5)");
+	static_assert(std::is_same<T, typename std::remove_cv<T>::type>::value,
+		"Type T trait mismatch (5). Do not put const/volatile specifiers inside mnd::cache template.");
 
 	std::atomic<bool> initialized{false};
 	T value{};
@@ -853,8 +855,8 @@ struct cache {
 	/* Quick lookup, does not care about the atomic readiness flag. */
 	T& operator*()              noexcept { return value; }
 	const T& operator*()  const noexcept { return value; }
-	T* operator->()             noexcept { return std::addressof(value); }
-	const T* operator->() const noexcept { return std::addressof(value); }
+	T* operator->()            & noexcept { return std::addressof(value); }
+	const T* operator->() const& noexcept { return std::addressof(value); }
 };
 
 template<typename T>
@@ -862,7 +864,7 @@ struct is_an_array : std::false_type {};
 template<typename T, std::size_t N>
 struct is_an_array<T[N]> : std::true_type {
 	using underlying_type = T;
-	static constexpr std::size_t size = N; 
+	static constexpr std::size_t size = N;
 };
 template<typename T, std::size_t N>
 struct is_an_array<std::array<T,N>> : std::true_type {
@@ -1382,7 +1384,7 @@ template <
 	/* Non-optimized, Eigen maybe has a tiny bit better optimized variance estimated.
 	 * For numeric stability, we do two passes, finding the arithmetic value first.
 	 * In our cases, arrays are usually small - order of 4-20. Two passes don't hurt performance. */
-	constexpr std::size_t N = mnd::len<Arr>();	
+	constexpr std::size_t N = mnd::len<Arr>();
 	if constexpr(N == 0) {
 		return {NAN, NAN};
 	} else if constexpr(N == 1) {
@@ -1457,7 +1459,7 @@ template<
 	typename std::enable_if_t<!is_an_array_v<Range>>* = nullptr
 > auto map(const Range& input, Callable&& fn) {
 	static_assert(is_range<const Range>::value, "Type T must support a const range iteration.");
-	using U = std::decay_t<
+	using U = remove_cvref_t<
 		std::invoke_result_t<Callable&, decltype(*std::begin(input))>
 	>;
 
@@ -1850,7 +1852,7 @@ protected:
  *  Collecting is done via a dyadic (binary) fold, e.g. for 8 instances of TOnce<T> objects:
  *
  *  a0, a1, a2, a3, a4, a5, a6, a7
- *    \/      \/      \/      \/   
+ *    \/      \/      \/      \/
  *   a01,    a23,    a45,    a67
  *      \   /           \   /
  *      a0123     ,     a4567
@@ -2047,7 +2049,7 @@ public:
 		copy->_collector = this->_collector;
 		return copy;
 	}
-	/* Copy only the payload; retain the destination's address and name and collector.
+	/* Copy only the payload+collector; retain the destination's address and name.
 	 * The wrapped types must match exactly. */
 	void CopyFrom(const TOnceBase& rhs) override final {
 		const auto* cvt = dynamic_cast<const TOnce<T>*>(&rhs);
@@ -2348,7 +2350,7 @@ public:
 		if constexpr(mnd::has_clean_noexcept<T>::value)
 			_inner->Clean();
 		else
-			static_assert(mnd::has_clean_noexcept<T>::value, "Type <T> has no `void Clean() noexcept` method defined.\n");
+			static_assert(mnd::always_false_v<T>, "Type <T> has no `void Clean() noexcept` method defined.\n");
 	}
 
 	/* Rule of five. We keep it here to be explicit about copy-ctor (not really necessary...) */
@@ -2444,7 +2446,11 @@ protected:
 			const auto& v_in  = src.GetTOnceVec();
 
 			for(std::shared_ptr<TOnceBase> o_item : v_out) {
+				if(!o_item) continue;
+				
 				for(std::shared_ptr<TOnceBase> i_item: v_in) {
+					if(!i_item) continue;
+
 					if(strcmp(o_item->GetName(), i_item->GetName()) == 0) {
 						o_item->CopyFrom(*i_item);
 						WARN("(dest: %s%s%s && src: %s%s%s): CopyIdenticalObjects => Object named '%s' automatically copied.\n",
@@ -2766,13 +2772,13 @@ private:
 
 public:
 	TAnalysisProcess() = default;
-	TAnalysisProcess(std::string file_in, std::string file_out, std::string rn_out) :
-	    TAnalysisProcess() {
-            info.in.fname  = std::move(file_in);
-            info.out.fname = std::move(file_out);
-            info.out.out_rnname = std::move(rn_out);
-            mnd::g_input_file.set( info.in.fname );
-		}
+	TAnalysisProcess(std::string file_in, std::string file_out, std::string rn_out)
+		: TAnalysisProcess() {
+		info.in.fname  = std::move(file_in);
+		info.out.fname = std::move(file_out);
+		info.out.out_rnname = std::move(rn_out);
+		mnd::g_input_file.set( info.in.fname );
+	}
 	
 	explicit TAnalysisProcess(
 		std::tuple<Ts...>&& w,
@@ -2792,7 +2798,7 @@ public:
 	}
 
 	/* Move ops cannot be defaulted due to std::atomic<T> */
-	TAnalysisProcess(TAnalysisProcess&& rhs) :
+	TAnalysisProcess(TAnalysisProcess&& rhs) noexcept :
 		q        {},
 		_running ( false                  ),
 		_do_write( rhs._do_write          ),
@@ -2804,7 +2810,7 @@ public:
 	
 	TAnalysisProcess& operator=(TAnalysisProcess&& rhs) noexcept {
 		if(this == &rhs) return *this;
-		_running  = false                 ; 
+		_running  = false                 ;
 		_do_write = rhs._do_write         ;
 		_thread   = std::move(rhs._thread);
 		_proc     = std::move(rhs._proc)  ;
@@ -2920,7 +2926,7 @@ public:
 		}
 		else {
 			return std::get<mnd::TTreePerThreadReader>(reader)
-			._tree->GetEntry(entry);
+				._tree->GetEntry(entry);
 		}
 	}
 
