@@ -516,8 +516,11 @@ struct Polynomial {
 	}
 
 private:
-	/* Expensive and slow function: */
-	void FindRoots() const { /* ... */ }
+	/* Expensive and slow function, something similar to this: */
+	void FindRoots() const {
+		Eigen::PolynomialSolver<double, Eigen::Dynamic> solver;
+		solver.compute(coefficients), roots_ = solver.roots();
+	}
 
 	void Init() const {
 		auto lock = std::lock_guard{mtx_};
