@@ -536,12 +536,12 @@ private:
 	
 	/* Mutex either per-instance or per-type.
 	 * As it suits you... */
-	/* inline static */ std::mutex mtx_{};
+	mutable std::mutex mtx_{}; // or inline static, w/o mutable
 }
 ```
 In the example above, the method `Polynomial::GetRoots()` is thread-safe to call in a concurrent environments,
 and the boolean check is branch-predicted and optimized out.
-The template `mnd::cache<T>` is guaranteed to be [semiregular](https://en.cppreference.com/cpp/concepts/semiregular)
+The wrapper type `mnd::cache<T>` is guaranteed to be [semiregular](https://en.cppreference.com/cpp/concepts/semiregular)
 and requires the underlying type to be semiregular and non-const/volatile as well.
 
 ## Example of usage <a name="phd"></a>
