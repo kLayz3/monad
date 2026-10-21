@@ -299,13 +299,13 @@ inline std::thread::id main_thread_id = std::this_thread::get_id();
 		WARN(__VA_ARGS__); \
 		fputc('\n', stderr); \
 		std::cerr << ::mnd::stacktrace(); \
-	} while (0)
+	} while(0)
 
 #define WARN(...) \
 	do { \
 		fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
 		fprintf(stderr, __VA_ARGS__); \
-	} while (0)
+	} while(0)
 
 #define WARN_ASYNC(...) \
 	do { \
@@ -313,23 +313,25 @@ inline std::thread::id main_thread_id = std::this_thread::get_id();
 		::mnd::safe_write(STDERR_FILENO, msg_, strlen(msg_)); \
 		const char* msg_v_ = ::mnd::msg(__VA_ARGS__); \
 		::mnd::safe_write(STDERR_FILENO, msg_v_, strlen(msg_v_)); \
-	} while (0)
+	} while(0)
 
-#define ERROR(...) do { \
-	YELL(__VA_ARGS__); \
-	fputc('\n', stderr); \
-	std::cerr << ::mnd::stacktrace(); \
-	std::abort(); \
-} while (0)
+#define ERROR(...) \
+	do { \
+		YELL(__VA_ARGS__); \
+		fputc('\n', stderr); \
+		std::cerr << ::mnd::stacktrace(); \
+		std::abort(); \
+	} while(0)
 
-#define MND_THROW(...) do { \
-	auto what = std::string{'\n'} + ::mnd::stacktrace(); \
-	what += ::mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM \
-		" => " MND_RGB_COL(252,110,242), __FILE_NAME__, __LINE__); \
-	what += ::mnd::msg(__VA_ARGS__); \
-	what += KNRM; \
-	throw std::runtime_error(what); \
-} while(0)
+#define MND_THROW(...) \
+	do { \
+		auto what = std::string{'\n'} + ::mnd::stacktrace(); \
+		what += ::mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM \
+			" => " MND_RGB_COL(252,110,242), __FILE_NAME__, __LINE__); \
+		what += ::mnd::msg(__VA_ARGS__); \
+		what += KNRM; \
+		throw std::runtime_error(what); \
+	} while(0)
 
 #ifdef MND_DEBUG_ENABLED
 #	define MND_ASSERT(expr) \
@@ -692,7 +694,7 @@ decltype(auto) visit_non_empty(Visitor&& vs, Var&& /* Variant&& */ var) {
 		[&](auto&& value) -> R {
 			using T = std::decay_t<decltype(value)>;
 			if constexpr(std::is_same_v<T, Empty>)
-				throw std::runtime_error("mnd::visit_non_empty except: `Empty` type encountered.");
+				MND_THROW("mnd::visit_non_empty except: `Empty` type encountered.");
 			else {
 				static_assert(std::is_same_v<R, std::invoke_result_t<Visitor&&, decltype(value)>>,
 					"Visitor must return the same type for every payload alternative.");
