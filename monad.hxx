@@ -213,6 +213,8 @@
        MND_STRINGIFY(r) ";" \
        MND_STRINGIFY(g) ";" \
        MND_STRINGIFY(b) "m"
+#define MND_RGB_BOLD_COL(r, g, b) \
+      BOLD MND_RGB_COL(r, g, b)
 
 #define MND_RGB_BCKGRND_COL(r, g, b) \
        "\x1b[48;2;" \
@@ -2716,6 +2718,16 @@ public:
 
 };
 inline InputFileInfo_ g_input_file;
+
+/* A build indicator: full-debug|debug|release */
+inline constexpr const char* build_mode =
+#if defined(MND_FULL_DEBUG_ENABLED)
+	MND_RGB_BOLD_COL(196, 30, 58) "full-debug" KNRM;
+#elif defined(MND_DEBUG_ENABLED)
+	MND_RGB_BOLD_COL(255,124,10) "debug" KNRM;
+#else
+	MND_RGB_BOLD_COL(124,255,10) "release" KNRM;
+#endif
 
 } // namespace mnd
 

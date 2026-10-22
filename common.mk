@@ -1,31 +1,48 @@
 # Optionally include this file into your main Makefile
 
-OPTIMIZATION = 1
-
 CXXFLAGS += -DPOOL_MAX_THREADS_=$(shell nproc) \
-			-DPROG_PATH=\"$(shell pwd -P)\"
+            -DPROG_PATH=\"$(shell pwd -P)\"
 
-ifneq ($(OPTIMIZATION), 1)
+# Logic to accept both build= and BUILD= as build-type variable..
+ifneq ($(origin build),undefined)
+  ifneq ($(origin BUILD),undefined)
+    ifneq ($(BUILD),$(build))
+      $(error Conflicting BUILD='$(BUILD)' and build='$(build)')
+    endif
+  endif
+  BUILD ?= $(build)
+endif
 
-CXXFLAGS += -ggdb -g -O0 -fno-omit-frame-pointer -fno-inline \
-	-fsanitize=undefined,address \
-	-DBOOST_STACKTRACE_USE_ADDR2LINE \
-	#-DMND_DEBUG_ENABLED
+BUILD ?= release
 
-LDFLAGS += -fsanitize=undefined,address
+ifeq ($(BUILD),full-debug)
+  CXXFLAGS += -ggdb -g -O0 -fno-omit-frame-pointer -fno-inline \
+    -fsanitize=undefined,address \
+    -DBOOST_STACKTRACE_USE_ADDR2LINE \
+    -DMND_FULL_DEBUG_ENABLED \
+    -DMND_DEBUG_ENABLED \
 
-export ASAN_OPTIONS=detect_leaks=1,strict_string_checks=1,alloc_dealloc_mismatch=1
-export MALLOC_CHECK_=3
-export GLIBC_TUNABLES=glibc.malloc.tcache_count=0
+  LDFLAGS += -fsanitize=undefined,address
+
+  export ASAN_OPTIONS=detect_leaks=1,strict_string_checks=1,alloc_dealloc_mismatch=1
+  export MALLOC_CHECK_=3
+  export GLIBC_TUNABLES=glibc.malloc.tcache_count=0
+
+else ifeq ($(BUILD),debug)
+  CXXFLAGS += -O3 -march=native
+  CXXFLAGS += -DMND_DEBUG_ENABLED
+
+else ifeq ($(BUILD),release)
+  CXXFLAGS += -O3 -march=native
+  CXXFLAGS += -DNDEBUG
 
 else
-
-CXXFLAGS += -O3 -march=native
+  $(error Unknown BUILD variable: $(BUILD) => Must be release|debug|full-debug)
 
 endif
 
-MONAD_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-MND_INCLUDE_DIR := $(MONAD_DIR)indicators/include
+MONAD_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+MND_INCLUDE_DIR := $(MONAD_DIR)/indicators/include
 
 CXXFLAGS += -I$(MND_INCLUDE_DIR)
 
