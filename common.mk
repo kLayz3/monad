@@ -52,3 +52,13 @@ CXXFLAGS += -I$(MND_INCLUDE_DIR)
 # complain, as it won't be able to unambiguously resolve it.
 
 CXXFLAGS += -DMND_EXPORT_OSTREAM_G_NAMESPACE
+
+.PHONY: info
+info:
+	@printf '%s\n' \
+			'Usage: make build=release|debug|full-debug' \
+			'       Uppercase BUILD= also accepted.' \
+			'' \
+			'release     Optimized (-O3 -march=native), assertions disabled.' \
+			'debug       Optimized (-O3 -march=native), assertions and MONAD-specific debug code enabled.' \
+			'full-debug  Unoptimized (-O0), debug symbols, ASan and UBSan enabled. Very slow runtime.'
