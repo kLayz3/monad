@@ -42,14 +42,9 @@
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
-#include <queue>
-#include <stack>
-#include <fstream>
-#include <typeinfo>
 #include <optional>
 #include <filesystem>
 #include <tuple>
-
 #include <atomic>
 #include <thread>
 
@@ -62,9 +57,9 @@
 #include "TH1.h"
 #include "TROOT.h"
 
-#if !defined(__has_include)
-#	error "__has_include macro not defined by the standard compiler? Update the GCC/Clang/MSVC please!"
-#endif
+#include "accessories/typedefs.hxx"
+#include "accessories/formatting.hxx"
+#include "accessories/meta.hxx"
 
 #if __has_include(<immintrin.h>)
 #   define MND_HAS_INTEL_INTRIN
@@ -96,9 +91,8 @@
 	namespace RExp2 = ROOT;
 #endif
 
-
 #if __has_include("boost/stacktrace.hpp")
-#   define _HAS_BOOST_INCLUDE
+#   define MND_HAS_BOOST_INCLUDE
 #	include "boost/stacktrace.hpp"
 #	include "boost/lockfree/spsc_queue.hpp"
 #	include "boost/lockfree/policies.hpp"
@@ -106,180 +100,27 @@
 #	error "Boost packages not found in the environment?"
 #endif
 
-#ifndef _MSC_VER
-#	include <cxxabi.h>
-#endif
-#if __has_include(<new>)
-#	include <new>
-#endif
-
 /* Keep this header as an option, not a dependency */
 #if __has_include("indicators/indicators.hh")
-#	define __HAS_INDICATORS
+#	define MND_HAS_INDICATORS
 #	include "indicators/indicators.hh"
 #endif
-
-#ifndef __FILE_NAME__
-#	ifdef __unix__
-#		define __FILE_NAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
-#	elif defined(__WIN32) || defined(WIN32)
-#		define __FILE_NAME__  (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
-#	else
-#		define __FILE_NAME__ __FILE__
-#	endif
-#endif
-
-// Regular text.
-#define KBLK "\e[0;30m"
-#define KRED "\e[0;31m"
-#define KGRN "\e[0;32m"
-#define KYEL "\e[0;33m"
-#define KBLU "\e[0;34m"
-#define KMAG "\e[0;35m"
-#define KCYN "\e[0;36m"
-#define KWHT "\e[0;37m"
-
-// Regular bold text.
-#define KB_BLK "\e[1;30m"
-#define KB_RED "\e[1;31m"
-#define KB_GRN "\e[1;32m"
-#define KB_YEL "\e[1;33m"
-#define KB_BLU "\e[1;34m"
-#define KB_MAG "\e[1;35m"
-#define KB_CYN "\e[1;36m"
-#define KB_WHT "\e[1;37m"
-
-// Regular underline text.
-#define KU_BLK "\e[4;30m"
-#define KU_RED "\e[4;31m"
-#define KU_GRN "\e[4;32m"
-#define KU_YEL "\e[4;33m"
-#define KU_BLU "\e[4;34m"
-#define KU_MAG "\e[4;35m"
-#define KU_CYN "\e[4;36m"
-#define KU_WHT "\e[4;37m"
-
-// High intensity text.
-#define KH_BLK "\e[0;90m"
-#define KH_RED "\e[0;91m"
-#define KH_GRN "\e[0;92m"
-#define KH_YEL "\e[0;93m"
-#define KH_BLU "\e[0;94m"
-#define KH_MAG "\e[0;95m"
-#define KH_CYN "\e[0;96m"
-#define KH_WHT "\e[0;97m"
-
-// Bold high intensity text.
-#define KBH_BLK "\e[1;90m"
-#define KBH_RED "\e[1;91m"
-#define KBH_GRN "\e[1;92m"
-#define KBH_YEL "\e[1;93m"
-#define KBH_BLU "\e[1;94m"
-#define KBH_MAG "\e[1;95m"
-#define KBH_CYN "\e[1;96m"
-#define KBH_WHT "\e[1;97m"
-
-// Bright backgrounds.
-#define BKH_BLK "\e[100m"
-#define BKH_RED "\e[101m"
-#define BKH_GRN "\e[102m"
-#define BKH_YEL "\e[103m"
-#define BKH_BLU "\e[104m"
-#define BKH_MAG "\e[105m"
-#define BKH_CYN "\e[106m"
-#define BKH_WHT "\e[107m"
-
-// Reset.
-#define KRNM "\e[0m"
-#define KNRM "\e[0m"
-#define COLOR_RESET "\e[0m"
-#define KBLINK "\e[5m"
-
-#define BOLD "\e[1m"
-#define EBOLD(x) BOLD #x KNRM
-#define EMPH(x) KBH_YEL #x KNRM
-#define EMPH1(x) KBH_CYN #x KNRM
-#define EMPH2(x) KBH_RED #x KNRM
-
-#define _MND_STRINGIFY_IMPL(x) #x
-#define MND_STRINGIFY(x) _MND_STRINGIFY_IMPL(x)
-#define MND_FILE_LINE_STR \
-	KGRN __FILE_NAME__ KNRM ":" KCYN MND_STRINGIFY(__LINE__) KNRM
-
-#define MND_EMPTY_MACRO(...)
-
-#define MND_RGB_COL(r, g, b) \
-       "\x1b[38;2;" \
-       MND_STRINGIFY(r) ";" \
-       MND_STRINGIFY(g) ";" \
-       MND_STRINGIFY(b) "m"
-#define MND_RGB_BOLD_COL(r, g, b) \
-      BOLD MND_RGB_COL(r, g, b)
-
-#define MND_RGB_BCKGRND_COL(r, g, b) \
-       "\x1b[48;2;" \
-       MND_STRINGIFY(r) ";" \
-       MND_STRINGIFY(g) ";" \
-       MND_STRINGIFY(b) "m"
 
 /* Sometimes Makefiles define specific `PROG_PATH` preproc and pass it directly to gcc,
  * but linters can't catch this hehe. Just have it here. */
 #ifndef PROG_PATH
-#define PROG_PATH "mnd_PROG_PATH_not_defined"
+#	define PROG_PATH "mnd_PROG_PATH_not_defined"
 #endif
 
-#if defined(__clang__) || defined(__GNUC__)
-	#define MND_FORCE_INLINE inline __attribute__((always_inline))
-	#define MND_NEVER_INLINE __attribute__((noinline))
-#elif defined(_MSC_VER)
-	#define MND_FORCE_INLINE __forceinline
-	#define MND_NEVER_INLINE __declspec(noinline)
-#else
-	#define MND_FORCE_INLINE inline
-	#define MND_NEVER_INLINE
-#endif
-
-#if defined(__GNUC__) || defined(__clang__)
-	#define MND_LIKELY(expr)   __builtin_expect(static_cast<bool>(expr), 1)
-	#define MND_UNLIKELY(expr) __builtin_expect(static_cast<bool>(expr), 0)
-#else
-	#define MND_LIKELY(expr)   (expr)
-	#define MND_UNLIKELY(expr) (expr)
-#endif
-
-/* ROOT-like Form() w/o dependency. */
 namespace mnd {
-inline const char* msg(const char* fmt, ...) {
-	thread_local std::string buffer;
-	buffer.clear();
 
-	/* Determine the size needed. */
-	va_list args;
-	va_start(args, fmt);
-	int size = std::vsnprintf(nullptr, 0, fmt, args);
-	va_end(args);
-
-	if(size < 0) return "";  // formatting error?
-
-	/* Resize buffer and actually write the formatted string. */
-	buffer.resize(size + 1);
-
-	va_start(args, fmt);
-	std::vsnprintf(buffer.data(), buffer.size(), fmt, args);
-	va_end(args);
-
-	/* Remove the trailing null. */
-	buffer.pop_back();
-
-	return buffer.c_str();
-}
 inline void safe_write(int fd, const char* s, std::size_t n) noexcept {
 	ssize_t r = ::write(fd, s, n);
 	(void)r; // ignored; to shutup GCC's ‘warn_unused_result’ [-Wunused-result]
 }
 
 inline std::string stacktrace() {
-#ifdef _HAS_BOOST_INCLUDE
+#ifdef MND_HAS_BOOST_INCLUDE
 	return boost::stacktrace::to_string(boost::stacktrace::stacktrace{});
 #else
 	return {};
@@ -290,23 +131,11 @@ inline std::thread::id main_thread_id = std::this_thread::get_id();
 
 } // namespace mnd
 
-#define YELL(...) \
-	do { \
-		fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
-		fprintf(stderr, KBH_RED); fprintf(stderr, __VA_ARGS__); fprintf(stderr, KNRM); \
-	} while(0)
-
 #define WARN_WITH_STACKTRACE(...) \
 	do { \
 		WARN(__VA_ARGS__); \
 		fputc('\n', stderr); \
 		std::cerr << ::mnd::stacktrace(); \
-	} while(0)
-
-#define WARN(...) \
-	do { \
-		fprintf(stderr, KGRN "%s" KNRM ":" KCYN "%d" KNRM " => ", __FILE_NAME__, __LINE__); \
-		fprintf(stderr, __VA_ARGS__); \
 	} while(0)
 
 #define WARN_ASYNC(...) \
@@ -315,24 +144,6 @@ inline std::thread::id main_thread_id = std::this_thread::get_id();
 		::mnd::safe_write(STDERR_FILENO, msg_, strlen(msg_)); \
 		const char* msg_v_ = ::mnd::msg(__VA_ARGS__); \
 		::mnd::safe_write(STDERR_FILENO, msg_v_, strlen(msg_v_)); \
-	} while(0)
-
-#define ERROR(...) \
-	do { \
-		YELL(__VA_ARGS__); \
-		fputc('\n', stderr); \
-		std::cerr << ::mnd::stacktrace(); \
-		std::abort(); \
-	} while(0)
-
-#define MND_THROW(...) \
-	do { \
-		auto what = std::string{'\n'} + ::mnd::stacktrace(); \
-		what += ::mnd::msg("\n" KGRN "%s" KNRM ":" KCYN "%d" KNRM \
-			" => " MND_RGB_COL(252,110,242), __FILE_NAME__, __LINE__); \
-		what += ::mnd::msg(__VA_ARGS__); \
-		what += KNRM; \
-		throw std::runtime_error(what); \
 	} while(0)
 
 #ifdef MND_DEBUG_ENABLED
@@ -359,11 +170,8 @@ inline std::thread::id main_thread_id = std::this_thread::get_id();
 
 #	define MND_ASSERT(expr) assert(expr)
 		
-#endif
+#endif // ifdef MND_DEBUG_ENABLED
 
-#define MND_RUSTIFY_TYPE(N) \
-	using u##N = uint##N##_t; \
-	using i##N = int##N##_t;
 
 /* An indicator to export certain free functions/aliases to global namespace.
  * It can confuse ADL, in that case just disable it. */
@@ -373,15 +181,6 @@ inline std::thread::id main_thread_id = std::this_thread::get_id();
 namespace mnd {
 #endif
 
-MND_RUSTIFY_TYPE( 8)
-MND_RUSTIFY_TYPE(16)
-MND_RUSTIFY_TYPE(32)
-MND_RUSTIFY_TYPE(64)
-using f64 = double;
-using f32 = float;
-
-#undef MND_RUSTIFY_TYPE
-
 template<typename T, std::size_t N>
 void Add(std::array<T,N>& lhs, const std::array<T,N>& rhs);
 template<typename T>
@@ -390,28 +189,6 @@ void Add(std::vector<T>& lhs, const std::vector<T>& rhs);
 #if !defined(MND_POLLUTE_G_NAMESPACE)
 }
 #endif
-
-/* Sometime useful libraries don't want to carry the entire MONAD dependency,
- * but require a stable `span` API. Therefore make it permissible to be yoinkable,
- * under the appropriate define guard. */
-#if !defined(MND_INCLUDE_SPAN_IS_DEFINED)
-#define MND_INCLUDE_SPAN_IS_DEFINED
-#if __cplusplus >= 202000L
-#	include <span>
-	namespace mnd {
-		template<typename T>
-		using span = std::span<T>;
-	}
-#elif __has_include("boost/beast/core/span.hpp")
-#	include "boost/beast/core/span.hpp"
-	namespace mnd {
-		template<typename T>
-		using span = boost::beast::span<T>;
-	}
-#else
-#	error "Neither C++20 given, nor boost span library for found. Cannot proceed."
-#endif // __cplusplus >= 202000L
-#endif // MND_INCLUDE_SPAN_IS_DEFINED
 
 namespace mnd {
 
@@ -450,7 +227,7 @@ void as_span(std::vector<bool, Alloc>& ) = delete;
 template<typename Alloc>
 void as_span(const std::vector<bool, Alloc>& ) = delete;
 
-#if defined(__HAS_INDICATORS)
+#if defined(MND_HAS_INDICATORS)
 
 /* Returns true if an update needs to take place.
  * Return value only needed for the dynamic renderer. */
@@ -473,7 +250,7 @@ inline bool PrintProgress (
 	return true;
 }
 
-#endif // __HAS_INDICATORS
+#endif // MND_HAS_INDICATORS
 
 template<typename T>
 void QuickSwap(std::vector<T>& v, int i, int j) noexcept(
@@ -660,10 +437,8 @@ void PrintElapsed(std::vector<TimePoint>&& v) {
 
 /* ----- std::variant trickery. ----- */
 using Empty = std::monostate;
-
 template<typename T>
 using Maybe = std::optional<T>;
-
 template<typename... Ts>
 using Variant = std::variant<Empty, Ts...>;
 
@@ -671,8 +446,6 @@ template<typename... Ts>
 constexpr bool IsEmpty(const Variant<Ts...>& v) noexcept {
 	return v.valueless_by_exception() or std::holds_alternative<Empty>(v);
 }
-
-enum class BinaryOpt : i32 { No = 0, Yes = 1 };
 
 /**
  * Apply 'std::visit' https://en.cppreference.com/w/cpp/utility/variant/visit2.html
@@ -708,20 +481,6 @@ decltype(auto) visit_non_empty(Visitor&& vs, Var&& /* Variant&& */ var) {
 	);
 }
 
-template<typename Tuple, typename Callable, std::size_t... Is>
-void _for_each_in_tuple_impl(Tuple&& t, Callable&& f, std::index_sequence<Is...>) {
-	(..., f (std::get<Is>(std::forward<Tuple>(t))));
-}
-template<typename Tuple, typename Callable>
-void for_each_in_tuple(Tuple&& t, Callable&& f) {
-	constexpr std::size_t N = std::tuple_size_v<std::decay_t<Tuple>>;
-	_for_each_in_tuple_impl(std::forward<Tuple>(t), std::forward<Callable>(f),
-		std::make_index_sequence<N>{});
-}
-
-template<typename>
-inline constexpr bool always_false_v = false;
-
 [[noreturn]] MND_FORCE_INLINE
 void unreachable() noexcept {
 #if defined(__clang__) || defined(__GNUC__)
@@ -735,10 +494,6 @@ void unreachable() noexcept {
 
 #if __cplusplus >= 202002L /* Mirrors STL-terminology */
 
-template<typename T>
-using remove_cvref = std::remove_cvref<T>;
-template<typename T>
-using remove_cvref_t = std::remove_cvref_t<T>;
 using jthread = std::jthread;
 
 #else
@@ -774,13 +529,6 @@ public:
 private:
 	std::thread t_;
 };
-
-template<typename T>
-struct remove_cvref {
-	using type = std::remove_cv_t<std::remove_reference_t<T>>;
-};
-template<typename T>
-using remove_cvref_t = typename remove_cvref<T>::type;
 
 #endif // __cplusplus >= 202002L
 
@@ -863,69 +611,7 @@ struct cache {
 	const T* operator->() const& noexcept { return std::addressof(value); }
 };
 
-template<typename T>
-struct is_an_array : std::false_type {};
-template<typename T, std::size_t N>
-struct is_an_array<T[N]> : std::true_type {
-	using underlying_type = T;
-	static constexpr std::size_t size = N;
-};
-template<typename T, std::size_t N>
-struct is_an_array<std::array<T,N>> : std::true_type {
-	using underlying_type = T;
-	static constexpr std::size_t size = N;
-};
-template<typename T>
-constexpr bool is_an_array_v = is_an_array<T>::value;
-
-template<typename T>
-struct ToStdArray { using type = T; };
-template<typename T, std::size_t N>
-struct ToStdArray<T[N]> { using type = std::array<typename ToStdArray<T>::type, N>; };
-template<typename T>
-using ToStdArray_t = typename ToStdArray<T>::type;
-
-/* Range is simply defined as any type that has a begin() and end() iterator */
-template<typename T, typename = void>
-struct is_range : std::false_type {};
-template<typename T>
-struct is_range<T, std::void_t <
-	decltype( std::begin(std::declval<T&>()) ),
-	decltype( std::end(std::declval<T&>()) ),
-	typename std::iterator_traits<
-		decltype(std::begin(std::declval<T&>()))
-	>::value_type
->> : std::true_type {
-	using underlying_type = typename std::iterator_traits<
-		decltype( std::begin(std::declval<T&>()) )
-	>::value_type;
-};
-
-template<typename, typename = void>
-struct is_sized_range : std::false_type {};
-template<typename T>
-struct is_sized_range <
-	T,
-	std::void_t <
-		typename is_range<T>::underlying_type,
-		decltype(std::size(std::declval<T&>()))
-	>
-> : std::true_type {
-	using underlying_type = typename is_range<T>::underlying_type;
-};
-
-template<typename, typename = void>
-struct is_indexable_range : std::false_type {};
-template<typename T>
-struct is_indexable_range <
-	T,
-	std::void_t <
-		typename is_sized_range<T>::underlying_type,
-		decltype(std::declval<T&>()[std::declval<std::size_t>()])
-	>
-> : std::true_type {
-	using underlying_type = typename is_range<T>::underlying_type;
-};
+namespace meta {
 
 template<typename T, typename = void>
 struct has_clean_noexcept : std::false_type {};
@@ -936,16 +622,6 @@ struct has_clean_noexcept <T,
 	std::is_same_v<void, decltype(std::declval<T&>().Clean())> &&
 	noexcept(std::declval<T&>().Clean())
 > {};
-
-template<typename, typename = std::void_t<>>
-struct has_value_type : std::false_type {};
-template<typename U>
-struct has_value_type<U, std::void_t<typename U::value_type>> : std::true_type {};
-
-template<typename T>
-struct is_std_array : std::false_type{};
-template<typename T, std::size_t N>
-struct is_std_array<std::array<T, N>> : std::true_type {};
 
 template<typename T, typename = void>
 struct has_clone : std::false_type {};
@@ -995,61 +671,10 @@ struct has_free_add_fn<T, std::void_t<
 >> : std::true_type {};
 
 template<typename T, typename = void>
-struct has_add_unary_op : std::false_type {};
-template<typename T>
-struct has_add_unary_op<T, std::void_t<
-	decltype( std::declval<T&>().operator+=(std::declval<const T&>() ) )
->> : std::true_type {};
-
-template<typename T, typename = void>
-struct has_add_binary_op : std::false_type {};
-template<typename T>
-struct has_add_binary_op<T, std::void_t<
-	decltype( std::declval<T>() + std::declval<T>() )
->> : std::bool_constant<
-	std::is_convertible_v<
-		decltype( std::declval<T>() + std::declval<T>() ),
-		T
-	>
-> {};
-template<typename T, typename = void>
-struct has_subt_binary_op : std::false_type {};
-template<typename T>
-struct has_subt_binary_op<T, std::void_t<
-	decltype( std::declval<T>() - std::declval<T>() )
->> : std::bool_constant<
-	std::is_convertible_v<
-		decltype( std::declval<T>() - std::declval<T>() ),
-		T
-	>
-> {};
-template<typename T, typename = void>
-struct has_mult_binary_op : std::false_type {};
-template<typename T>
-struct has_mult_binary_op<T, std::void_t<
-	decltype( std::declval<T>() * std::declval<T>() )
->> : std::bool_constant<
-	std::is_convertible_v<
-		decltype( std::declval<T>() * std::declval<T>() ),
-		T
-	>
-> {};
-
-template<typename T, typename = void>
 struct has_free_mean_fn : std::false_type {};
 template<typename T>
 struct has_free_mean_fn<T, std::void_t<
 	decltype( Mean( std::declval<T&>(), std::declval<const T&>() ) )
->> : std::true_type {};
-
-template<typename T, typename = void>
-struct has_add_div_unary_op : std::false_type {};
-template<typename T>
-struct has_add_div_unary_op<T, std::void_t <
-	std::conjunction <
-		decltype( std::declval<T&>().operator+=(std::declval<const T&>() ) ) ,
-		decltype( std::declval<T&>().operator/=(std::declval<const int>() ) )
-	>
 >> : std::true_type {};
 
 template<typename T, typename = void>
@@ -1062,17 +687,7 @@ struct has_process_entry<T, std::void_t<
 		void
 	> {};
 
-template< template<typename...> typename Base, typename Derived>
-struct _is_base_of_template_impl {
-	template<typename... Ts>
-	static constexpr std::true_type test(Base<Ts...>& );
-	static constexpr std::false_type test(...);
-	using type = decltype(test(std::declval<Derived&>()));
-};
-
-template< template<typename...> typename Base, typename Derived,
-	typename Bare = remove_cvref_t<Derived>>
-using is_base_of_template = typename _is_base_of_template_impl<Base, Bare>::type;
+} // namespace meta
 
 template<typename Tuple, std::size_t... Is>
 auto zip_refs_impl(Tuple& t1, const Tuple& t2, std::index_sequence<Is...>) {
@@ -1097,261 +712,16 @@ auto zip_refs(Tuple& t1, const Tuple& t2) {
 	return zip_refs_impl( t1, t2, std::make_index_sequence<N>{} );
 }
 
-template<typename T>
-constexpr bool is_pathlike_arg_v =
-	std::is_base_of_v<std::ifstream, std::decay_t<T>> ||
-	std::is_constructible_v<std::ifstream, T&&> ||
-	std::is_constructible_v<std::string, T&&> ||
-	std::is_constructible_v<std::filesystem::path, T&&>;
-
-template<typename T,
-	typename U = std::decay_t<T>,
-	typename std::enable_if<is_pathlike_arg_v<T>>::type* = nullptr
-> Maybe<std::ifstream> get_maybe_ifstream(T&& arg) {
-	if constexpr(std::is_base_of_v<std::istream, U>) {
-		if(arg.is_open()) return arg;
-		else return {};
-	}
-	else if constexpr(
-		std::is_constructible_v<std::ifstream, T&&> ||
-		std::is_constructible_v<std::filesystem::path, T&&>
-	) {
-		auto f = std::ifstream(std::forward<T>(arg));
-		if(f.is_open()) return f;
-		else return {};
-	}
-	else if constexpr(std::is_constructible_v<std::string, T&&>) {
-		auto f = std::ifstream(std::string(std::forward<T>(arg)));
-		if(f.is_open()) return f;
-		else return {};
-	}
-	else
-		static_assert(std::is_constructible_v<std::string, T&&>,
-			"Type not constructible to ifstream or path-like type.");
-}
-
-template<typename T>	
-bool is_file_readable(T&& arg) {
-	return get_maybe_ifstream(std::forward<T>(arg)).has_value();
-}
-
-template<typename T,
-	typename U = std::decay_t<T>
-> Maybe<std::string> get_file_path(T&& arg) {
-	static_assert(is_pathlike_arg_v<U>, "Type <T> must be path-like");
-	if constexpr(std::is_base_of_v<std::istream, U>)
-		return {};
-	else if constexpr(std::is_constructible_v<std::string, T&&>)
-		return std::string(std::forward<T>(arg));
-	else if constexpr(std::is_constructible_v<std::filesystem::path, T&&>)
-		return std::filesystem::path(std::forward<T>(arg)).string();
-}
-
-/* The mnd::median returns by *value*, as is normally used with basic arithmetic
- * types. For custom types that have defined operators it will also work, but the
- * noexcept specifier might be an overkill... */
-template<typename T,
-	typename U = remove_cvref_t<T>,
-	std::size_t N = is_an_array<U>::size,
-	char(*)[N % 2] = nullptr
-> constexpr auto median(const T& sorted_arr) noexcept(
-	std::is_arithmetic_v<typename is_an_array<U>::underlying_type>
-) {
-	return sorted_arr[N/2];
-}
-
-/* Assume it doesn't overflow. */
-template<typename T,
-	typename U = remove_cvref_t<T>,
-	std::size_t N = is_an_array<U>::size,
-	char(*)[!(N % 2)] = nullptr
-> constexpr auto median(const T& sorted_arr) noexcept(
-	std::is_arithmetic_v<typename is_an_array<U>::underlying_type>
-) {
-	static_assert(N > 0, "mnd::median requires a nonempty array.");
-	return (sorted_arr[N/2] + sorted_arr[N/2 - 1]) / 2;
-}
-
-template<typename T, typename... Ts>
-constexpr auto min(T t, Ts... ts) noexcept {
-	static_assert(std::is_arithmetic_v<
-		std::remove_reference_t<T>
-	> &&
-	(std::is_arithmetic_v<
-		std::remove_reference_t<Ts>
-	> && ...), "Types passed must be arithmetic, basic types.");
-
-	using R = std::common_type_t<T, Ts...>;
-	R r = static_cast<R>(t);
-	((r = std::min<R>(r, static_cast<R>(ts))), ...);
-	return r;
-}
-template<typename T, typename... Ts>
-constexpr auto max(T t, Ts... ts) noexcept {
-	static_assert(std::is_arithmetic_v<
-		std::remove_reference_t<T>
-	> &&
-	(std::is_arithmetic_v<
-		std::remove_reference_t<Ts>
-	> && ...), "Types passed must be arithmetic, basic types.");
-
-	using R = std::common_type_t<T, Ts...>;
-	R r = static_cast<R>(t);
-	((r = std::max<R>(r, static_cast<R>(ts))), ...);
-	return r;
-}
 template<typename T,
 	typename U = remove_cvref_t<T>
-> constexpr int FindIndex(const T& arr, const typename is_an_array<U>::underlying_type& val) noexcept(
+> constexpr int FindIndex(const T& arr, const typename meta::is_an_array<U>::underlying_type& val) noexcept(
 	noexcept(static_cast<bool>(arr[0] == val))
 ) {
-	static_assert(is_an_array_v<U>, "Type T must be a C-style array or \'std::array<T,N>\'");
-	constexpr std::size_t N = is_an_array<U>::size;
+	static_assert(meta::is_an_array_v<U>, "Type T must be a C-style array or \'std::array<T,N>\'");
+	constexpr std::size_t N = meta::is_an_array<U>::size;
 	for(std::size_t i=0; i < N; ++i)
 		if(arr[i] == val) return i;
 	return -1;
-}
-
-/* Not really needed, as `std::size()` does very similar thing. Kept for BC */
-template<typename T,
-	typename U = remove_cvref_t<T>
-> constexpr int len(const T& arr) noexcept {
-	static_assert(is_an_array_v<U>, "Passed type must either be an array reference `T (&)[N]` or `std::array<T,N>&` .");
-	(void)arr;
-	return static_cast<int>(is_an_array<U>::size);	
-}
-template<typename T,
-	typename U = remove_cvref_t<T>
-> constexpr int len() noexcept {
-	static_assert(is_an_array_v<U>, "Passed type must either be an array reference `T (&)[N]` or `std::array<T,N>&` .");
-	return static_cast<int>(is_an_array<U>::size);	
-}
-
-/* Next few routines serve to violently unroll loops.
- * Namely, GCC sometimes even in -03 refuses to unroll small loops (I don't understand why).
- * The pragma unroll only works if the loop size is known at preproc time.
- * ... Also unrolling over a static-sized container. :-) */
-template<std::size_t Offset, typename Sequence, bool reversed>
-struct offset_sequence;
-
-template<std::size_t Offset, std::size_t... Is>
-struct offset_sequence<Offset, std::index_sequence<Is...>, false> {
-	using type = std::index_sequence<(Offset + Is)...>;
-	// a sequence: Offset, Offset+1, ..., Offset-1 + sizeof...(Is)
-};
-template<std::size_t Offset, std::size_t... Is>
-struct offset_sequence<Offset, std::index_sequence<Is...>, true> {
-	using type = std::index_sequence<(Offset - Is)...>;
-	// a sequence: Offset, Offset-1, ..., Offset+1 - sizeof...(Is)
-};
-
-template<
-	std::size_t Begin,
-	std::size_t End
-> using make_index_range =
-	typename offset_sequence <
-		Begin,
-		std::make_index_sequence <
-			(Begin <= End) ? (End-Begin) : (Begin-End)
-		>,
-		(Begin > End)
-	>::type; /*     std::index_sequence<Begin, Begin+1, ..., End-1> */
-	         /* or: std::index_sequence<Begin, Begin-1, ..., End+1> */
-
-template <
-	typename Callable,
-	std::size_t... Is
-> constexpr void _static_for_impl(Callable&& f, std::index_sequence<Is...>)
-	noexcept((std::is_nothrow_invocable <
-		Callable&, std::integral_constant<std::size_t, Is>
-	>::value && ...))
-{
-	(..., f(std::integral_constant<std::size_t, Is>{}));
-}
-template <
-	std::size_t Begin,
-	std::size_t End,
-	typename Callable
-> constexpr void static_for(Callable&& f)
-	noexcept( noexcept(_static_for_impl(
-		std::forward<Callable>(f),
-		make_index_range<Begin, End>{}
-	)))
-{
-	_static_for_impl(std::forward<Callable>(f), make_index_range<Begin, End>{});
-}
-
-/* Example:                                          .LCO: .string "%zu, "
- * static_for<2,6>([](auto I) {                      sub     rsp, 8
-     constexpr std::size_t i = decltype(I)::value;   mov     esi, 4
-     printf("%zu, ", i*i);                           mov     edi, OFFSET FLAT:.LCO
- * });                                               xor     eax, eax
- * // 4, 9, 16, 25,                                  call    printf
- *                                                   mov     esi, 9 ... */
-
-/* Functor invocation simply gets folded over the entire static-sized container. */
-template <
-	typename Arr,
-	typename Callable,
-	std::size_t... Is
-> constexpr void _static_for_each_impl(Arr&& arr, Callable&& f, std::index_sequence<Is...>)
-	noexcept((noexcept(std::invoke(
-		std::declval<Callable&>(),
-		std::declval<Arr>()[Is]
-	)) && ...))
-{
-	(..., f(std::forward<Arr>(arr)[Is]));
-}
-
-template <
-	typename Arr,
-	typename Callable
-> constexpr void static_for_each(Arr&& arr, Callable&& f)
-	noexcept( noexcept(_static_for_each_impl(
-		std::forward<Arr>(arr),
-		std::forward<Callable>(f),
-		std::make_index_sequence <
-			mnd::len<remove_cvref_t<Arr>>()
-		>{}
-	)))
-{
-	using Bare = remove_cvref_t<Arr>;
-	constexpr std::size_t N = mnd::len<Bare>();
-	_static_for_each_impl(std::forward<Arr>(arr), std::forward<Callable>(f),
-		std::make_index_sequence<N>{});
-}
-
-using Unroll = BinaryOpt;
-template <
-	Unroll U = Unroll::No,
-	typename ResultType = void, // If left unspecified, result type is the underlying type of the array. */
-	// .. all types below this line deduced :-)
-	typename Arr,
-	typename T = typename is_an_array<remove_cvref_t<Arr>>::underlying_type,
-	typename R = std::conditional_t<std::is_void_v<ResultType>, T, ResultType>
-> constexpr R sum(const Arr& arr) noexcept /* We don't explicitly check if its noexcept.. TODO. */
-{
-	static_assert(has_add_binary_op<R>::value, "Underlying type must have binary addition operator well defined.");
-	if constexpr(U == Unroll::No) {
-		R result = static_cast<R>(0);
-		for(const auto& value : arr)
-			result = std::move(result) + static_cast<R>(value);
-		return result;
-	} else {
-		R sum = static_cast<R>(0);
-		static_for_each(arr, [&sum](const T& val) { sum = std::move(sum) + static_cast<R>(val); });
-		return sum;
-	}
-}
-
-template <
-	Unroll U = Unroll::No,
-	typename ResultType = void, /* Check API above. */
-	// .. all types below this line deduced :-)
-	typename Arr,
-	typename R = decltype( mnd::sum<U,ResultType>(std::declval<const Arr&>()) )
-> constexpr R mean(const Arr& arr) noexcept {
-	return mnd::sum<U, ResultType>(arr) / static_cast<R>(mnd::len<Arr>());
 }
 
 /* Small container to encapsulate both mean and sample variance. */
@@ -1381,14 +751,15 @@ struct MeanVar {
 template <
 	Unroll U = Unroll::No,
 	typename Arr,
-	typename T = typename is_an_array<remove_cvref_t<Arr>>::underlying_type
+	typename T = typename meta::is_an_array<remove_cvref_t<Arr>>::underlying_type
 > constexpr MeanVar mean_var(const Arr& arr) noexcept {
 	static_assert(std::is_convertible<T, double>::value, "Underlying type must be convertable to double.");
 
 	/* Non-optimized, Eigen maybe has a tiny bit better optimized variance estimated.
 	 * For numeric stability, we do two passes, finding the arithmetic value first.
 	 * In our cases, arrays are usually small - order of 4-20. Two passes don't hurt performance. */
-	constexpr std::size_t N = mnd::len<Arr>();
+	constexpr size_t N = mnd::len<Arr>();
+
 	if constexpr(N == 0) {
 		return {NAN, NAN};
 	} else if constexpr(N == 1) {
@@ -1416,11 +787,11 @@ template <
 template <
 	typename Range,
 	typename Bare = remove_cvref_t<Range>,
-	typename = typename std::enable_if_t<!is_an_array<Bare>::value>
+	typename = typename std::enable_if_t<!meta::is_an_array<Bare>::value>
 > MeanVar mean_var(const Range& r) noexcept {
-	static_assert(mnd::is_range<Range>::value,
+	static_assert(meta::is_range<Range>::value,
 		"Type `Range` must be an MONAD-compatible range.");
-	using T = typename mnd::is_range<Range>::underlying_type;
+	using T = typename meta::is_range<Range>::underlying_type;
 	static_assert(std::is_convertible_v<T, double>,
 		"Underlying type must be convertible to double.");
 
@@ -1460,15 +831,15 @@ constexpr std::array<T, N> make_filled_array(T value) {
 template<
 	typename Range,
 	typename Callable,
-	typename std::enable_if_t<!is_an_array_v<Range>>* = nullptr
+	typename std::enable_if_t<!meta::is_an_array_v<Range>>* = nullptr
 > auto map(const Range& input, Callable&& fn) {
-	static_assert(is_range<const Range>::value, "Type T must support a const range iteration.");
+	static_assert(meta::is_range<const Range>::value, "Type T must support a const range iteration.");
 	using U = remove_cvref_t<
 		std::invoke_result_t<Callable&, decltype(*std::begin(input))>
 	>;
 
 	std::vector<U> output;
-	if constexpr(is_sized_range<const Range>::value) {
+	if constexpr(meta::is_sized_range<const Range>::value) {
 		output.reserve(std::size(input));
 	}
 
@@ -1506,274 +877,16 @@ constexpr auto map_array(
 template<
 	typename Arr,
 	typename Callable,
-	typename std::enable_if_t<is_an_array_v<Arr>>* = nullptr
+	typename std::enable_if_t<meta::is_an_array_v<Arr>>* = nullptr
 > constexpr auto map(const Arr& input, Callable&& fn) noexcept(
 	noexcept(detail::map_array(
 		input, fn,
-		std::make_index_sequence<is_an_array<Arr>::size>{}
+		std::make_index_sequence<meta::is_an_array<Arr>::size>{}
 	))
 ) {
 	return detail::map_array(input, fn,
-		std::make_index_sequence<is_an_array<Arr>::size>{}
+		std::make_index_sequence<meta::is_an_array<Arr>::size>{}
 	);
-}
-
-/* Returns the name of the type passed, also adding
- * ref-cv qualifiers. Demangles templated types, too :-)
- * To print type of an entity `a`, just do:
- *   mnd::type_name<decltype(a)>();
- * This works only for entities, not for expressions!
- * https://en.cppreference.com/cpp/language/decltype §1 */
-template<typename T>
-MND_NEVER_INLINE std::string type_name() {
-	using U = std::remove_reference_t<T>;
-
-	std::unique_ptr<char, void(*)(void*)> own(
-#ifndef _MSC_VER
-		abi::__cxa_demangle(typeid(U).name(), nullptr,
-			nullptr, nullptr),
-#else
-		nullptr,
-#endif
-		std::free
-	);
-	std::string r = (own) ? own.get() : typeid(U).name();
-	if constexpr(std::is_const_v<U>)
-		r += " const";
-	if constexpr(std::is_volatile_v<U>)
-		r += " volatile";
-	if constexpr(std::is_lvalue_reference_v<T>)
-		r += "&";
-	else if constexpr(std::is_rvalue_reference_v<T>)
-		r += "&&";
-	return r;
-}
-
-#define _SELF_TYPE_CSTR \
-	::mnd::type_name<typename ::mnd::remove_cvref<decltype(*this)>::type>().c_str()
-
-namespace fmt {
-namespace detail {
-
-template<typename T>
-struct range_format {
-	static constexpr bool enabled = false;
-	static constexpr bool keyed = false;
-};
-template<typename T, std::size_t N>
-struct range_format<std::array<T, N>> {
-	static constexpr bool enabled = true;
-	static constexpr bool keyed = false;
-};
-/* Copy-pasta from https://en.cppreference.com/cpp/container §Iterator invalidation */
-#define MND_FMT_SEQUENCE(Container) \
-	template<typename... Args> \
-	struct range_format<Container<Args...>> { \
-		static constexpr bool enabled = true; \
-		static constexpr bool keyed = false; \
-	}
-#define MND_FMT_MAP(Container) \
-	template<typename... Args> \
-	struct range_format<Container<Args...>> { \
-		static constexpr bool enabled = true; \
-		static constexpr bool keyed = true; \
-	}
-
-MND_FMT_SEQUENCE(std::vector);
-MND_FMT_SEQUENCE(std::deque);
-MND_FMT_SEQUENCE(std::list);
-MND_FMT_SEQUENCE(std::set);
-MND_FMT_SEQUENCE(std::multiset);
-MND_FMT_MAP(std::map);
-MND_FMT_MAP(std::multimap);
-MND_FMT_SEQUENCE(std::unordered_set);
-MND_FMT_SEQUENCE(std::unordered_multiset);
-MND_FMT_MAP(std::unordered_map);
-MND_FMT_MAP(std::unordered_multimap);
-
-#undef MND_FMT_MAP
-#undef MND_FMT_SEQUENCE
-
-} // namespace detail
-
-/* FWD declarations so nesting works. Long live recursion :) */
-template<typename Range,
-	typename std::enable_if_t<detail::range_format<Range>::enabled>* = nullptr
-> std::ostream& operator<<(std::ostream&, const Range&);
-
-/* Special stack/queue/priority_queue overloads. */
-template<typename T, typename Container>
-std::ostream& operator<<(std::ostream&, const std::stack<T, Container>&);
-template<typename T, typename Container>
-std::ostream& operator<<(std::ostream&, const std::queue<T, Container>&);
-template<typename T, typename Container, typename Compare>
-std::ostream& operator<<(std::ostream&, const std::priority_queue<T, Container, Compare>&);
-
-/* Also general span. */
-template<typename T>
-std::ostream& operator<<(std::ostream&, mnd::span<T>);
-
-/* Tuple+pair */
-template<typename... Ts>
-std::ostream& operator<<(std::ostream& , const std::tuple<Ts...>& );
-template<typename T1, typename T2>
-std::ostream& operator<<(std::ostream& , const std::pair<T1,T2>& );
-
-namespace detail {
-
-template<bool Keyed, typename Iterator>
-std::ostream& output_range(
-	std::ostream& os,
-	Iterator first,
-	Iterator last
-) {
-	if constexpr(Keyed) os << '{';
-	else                os << '[';
-
-	if(first != last) {
-		if constexpr(Keyed)
-			os << first->first << ": " << first->second;
-		else
-			os << *first;
-
-		while(++first != last) {
-			os << ", ";
-			if constexpr(Keyed)
-				os << first->first << ": " << first->second;
-			else
-				os << *first;
-		}
-	}
-
-	if constexpr(Keyed) return os << '}';
-	else                return os << ']';
-}
-
-template<typename Adaptor, typename GetNext>
-std::ostream& output_adaptor(
-	std::ostream& os,
-	Adaptor copy,
-	GetNext get_next
-) {
-	os << '[';
-
-	if(!copy.empty()) {
-		os << get_next(copy);
-		copy.pop();
-	
-		while(!copy.empty()) {
-			os << ", " << get_next(copy);
-			copy.pop();
-		}
-	}
-
-	return os << ']';
-}
-
-/* Format tuple elements with indices [first, last>. Handles nested tuples, too! */
-template<typename... Ts>
-std::ostream& print_tuple(
-	std::ostream& os,
-	const std::tuple<Ts...>& tup,
-	std::size_t first = 0,            // first index to print
-	std::size_t last  = sizeof...(Ts) // first-after-last index to print.
-) {
-	using Tuple = std::tuple<Ts...>;
-	constexpr std::size_t N = sizeof...(Ts);
-
-	if(first > last || last > N)
-		ERROR("Invalid tuple '%s' print range? Requested [%zu, %zu>\n",
-			mnd::type_name<Tuple>().c_str(), first, last);
-
-	os << '[';
-
-	mnd::static_for<0, N>([&](auto I) {
-		constexpr std::size_t i = decltype(I)::value;
-
-		if(i >= first && i < last) {
-			if(i != first) os << ", ";
-			os << std::get<i>(tup);
-		}
-	});
-	return os << ']';
-}
-
-} // namespace detail
-
-template<typename Range,
-	typename std::enable_if_t<detail::range_format<Range>::enabled>*
-> std::ostream& operator<<(std::ostream& os, const Range& range) {
-	return detail::output_range<detail::range_format<Range>::keyed>(
-		os, range.begin(), range.end()
-	);
-}
-template<typename T>
-std::ostream& operator<<(std::ostream& os, mnd::span<T> values) {
-	return detail::output_range<false>(
-		os, values.begin(), values.end()
-	);
-}
-/* ^^^ Not exposing generic: std::ostream& operator<<(std::ostream& , const T (&)[N] )
- * as it would blow up with most standard overloads, even the "Hello World" breaks then... */
-
-/* Special overloads for stack/queue/prio_queue as these don't expose iteration.
- * We inspect them by taking a copy and popping it down. */
-template<typename T, typename Container>
-std::ostream& operator<<(std::ostream& os, const std::stack<T, Container>& v) {
-	static_assert(std::is_copy_constructible_v<T> && std::is_copy_constructible_v<Container>,
-		"Printing the stack<T,C> requires copy-constructible underlying element type T, and container itself.");
-	return detail::output_adaptor(os, v,
-		[](const auto& a) -> decltype(auto) { return a.top(); }
-	);
-}
-template<typename T, typename Container>
-std::ostream& operator<<(std::ostream& os, const std::queue<T, Container>& v) {
-	static_assert(std::is_copy_constructible_v<T> && std::is_copy_constructible_v<Container>,
-		"Printing the queue<T,C> requires copy-constructible underlying element type T, and container itself.");
-	return detail::output_adaptor(os, v,
-		[](const auto& a) -> decltype(auto) { return a.front(); }
-	);
-}
-template<typename T, typename Container, typename Compare>
-std::ostream& operator<<(
-	std::ostream& os,
-	const std::priority_queue<T, Container, Compare>& v
-) {
-	static_assert(std::is_copy_constructible_v<T> && std::is_copy_constructible_v<Container>,
-		"Formatting the priority_queue<T,C,Comp> requires copy-constructible underlying element type T, and container itself.");
-	return detail::output_adaptor(os, v,
-		[](const auto& a) -> decltype(auto) { return a.top(); }
-	);
-}
-
-template<typename... Ts>
-std::ostream& operator<<(std::ostream& os, const std::tuple<Ts...>& tup) {
-	return detail::print_tuple(os, tup);
-}
-template<typename T1, typename T2>
-std::ostream& operator<<(std::ostream& os, const std::pair<T1,T2>& p) {
-	return os << '[' << p.first << ", " << p.second << ']';
-}
-
-} // namespace fmt
-using fmt::operator<<;
-
-template<typename T,
-	typename = std::void_t<
-		decltype(std::declval<std::ostream&>() << std::declval<const T&>())
-	>
-> std::string streamable(const T& obj) {
-	std::ostringstream os;
-	os << obj;
-	return os.str();
-}
-
-/* Concatenates bunch of streamable arguments which can be lvalues, statics, etc. and returns an owned std::string. */
-template<typename... Args>
-std::string sstrcat(Args&&... args) {
-	std::ostringstream oss{};
-	(oss << ... << std::forward<Args>(args));
-	return oss.str();
 }
 
 /* Sometimes cursor can be hidden mid execution,
@@ -1920,11 +1033,11 @@ public:
 		_internal(std::forward<Ts>(args)...) {}
 
 	/* Case 3: T constructible via init list; C++ painpoint. */
-	template<typename U = T, typename std::enable_if<mnd::has_value_type<U>::value>::type* = nullptr>
+	template<typename U = T, typename std::enable_if<mnd::meta::has_value_type<U>::value>::type* = nullptr>
 		TOnce(const char* name, std::initializer_list<typename U::value_type> il) : TOnceBase(name) {
 			if constexpr(std::is_constructible_v<U, std::initializer_list<typename U::value_type>>)
 				_internal = U(il); // vector, list, etc
-			else if constexpr(mnd::is_std_array<U>::value) {
+			else if constexpr(mnd::meta::is_std_array<U>::value) {
 				if(il.size() == 0)
 					_internal.fill(typename U::value_type() );
 				else if(il.size() == 1)
@@ -1948,12 +1061,12 @@ public:
 		{ _collector = fn; }
 	
 	/* Case 5.5: same as previous, but with init list. */
-	template<typename U = T, typename std::enable_if<mnd::has_value_type<U>::value>::type* = nullptr>
+	template<typename U = T, typename std::enable_if<mnd::meta::has_value_type<U>::value>::type* = nullptr>
 		TOnce(const char* name, void (*fn)(T&, const T&), std::initializer_list<typename U::value_type> il)
 		: TOnce(name, il) { _collector = fn; }
 
 	void SetName(std::string name, const char* title = "") override {
-		if constexpr(std::is_base_of_v<TNamed, T> || mnd::has_setname<T>::value) {
+		if constexpr(std::is_base_of_v<TNamed, T> || mnd::meta::has_setname<T>::value) {
 			_internal.SetName(name.c_str());
 			if constexpr(std::is_base_of_v<TNamed, T>)
 				if(title && *title) _internal.SetTitle(title);
@@ -1962,12 +1075,12 @@ public:
 	}
 
 	Int_t Write(TFile* f = nullptr, const char* name = "") override {
-		if(!name) ERROR("%s [[ %s ]]. Don't pass nullptr for name arg in TOnce::Write.", _name.c_str(), _SELF_TYPE_CSTR);
+		if(!name) ERROR("%s [[ %s ]]. Don't pass nullptr for name arg in TOnce::Write.", _name.c_str(), MND_SELF_TYPE_CSTR);
 		if(!f || f->IsZombie() || !f->IsOpen()) {
 			f = gDirectory->GetFile();
 			if(!f || f->IsZombie() || !f->IsOpen())
 				ERROR("%s [[ %s ]] (label: \'%s\') : output ROOT file not supplied or invalid and gDirectory holds no open valid file. (f=0x%016lx)",
-					_name.c_str(), _SELF_TYPE_CSTR, name, (uintptr_t)f);
+					_name.c_str(), MND_SELF_TYPE_CSTR, name, (uintptr_t)f);
 		}
 
 		if constexpr(std::is_base_of_v<TObject, T>)
@@ -1993,7 +1106,7 @@ public:
 		
 		if constexpr(std::is_base_of_v<TObject, T>) {
 			// Try calling `Copy` if it exists in the derived class.
-			if constexpr(mnd::has_copy<T>::value)
+			if constexpr(mnd::meta::has_copy<T>::value)
 				tmp->Copy(_internal);
 			else
 				_internal = *tmp; // deep-copy ; asserted via type traits on the top.
@@ -2017,18 +1130,18 @@ public:
 		else if constexpr(std::is_base_of_v<TObject, T>) {
 			copy = std::make_unique<TOnce<T>>( this->GetName() );
 
-			if constexpr(mnd::has_copy<T>::value)
+			if constexpr(mnd::meta::has_copy<T>::value)
 				this->_internal.Copy(copy->_internal);
 
 			else { /* virtual TObject* Clone(const char *newname="") const */
-				if constexpr(mnd::has_set_directory<T>::value) /* Reassigning the unique_ptr must not double-free. */
+				if constexpr(mnd::meta::has_set_directory<T>::value) /* Reassigning the unique_ptr must not double-free. */
 					copy->_internal.SetDirectory(nullptr);
 
 				/* This calls case [5] ctor of TOnce<T> */
 				copy = std::make_unique<TOnce<T>> (this->GetName(),
 					/* T&& */ *static_cast<T*>( _internal.Clone(this->GetName()) ));
 
-				if constexpr(mnd::has_set_directory<T>::value) /* Reassigning the unique_ptr must not double-free. */
+				if constexpr(mnd::meta::has_set_directory<T>::value) /* Reassigning the unique_ptr must not double-free. */
 					copy->_internal.SetDirectory(nullptr);
 			}
 		}
@@ -2060,7 +1173,7 @@ public:
 		if(!cvt) { /* Issue an error. Reason is simple: caller checks if two bases got matching names.
 		            * If yes, hard assert their types. Top level callers can decide on different naming then. */
 			ERROR("Type: '%s', wrapped type: '%s'. TOnce object name '%s'. TOnce<T>::In CopyFrom(..) - dynamic cast failed. "
-				"RHS is named '%s'. Underlying types mismatched!", _SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
+				"RHS is named '%s'. Underlying types mismatched!", MND_SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
 				this->GetName(), rhs.GetName());
 		}
 
@@ -2079,31 +1192,31 @@ public:
 
 		if( !cvt)
 			ERROR("Type: %s, wrapped type: %s. TOnce object name '%s'. In Collect(..) - dynamic cast failed. "
-				"RHS is named '%s'", _SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
+				"RHS is named '%s'", MND_SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
 				this->GetName(), rhs.GetName());
 
 		if(strcmp(this->GetName(), rhs.GetName()) != 0)
 			ERROR("Type: %s, wrapped type: %s. Trying to collect, but the objects are named differently? "
-					"[1]: %s ; [2]: %s", _SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
+					"[1]: %s ; [2]: %s", MND_SELF_TYPE_CSTR, mnd::type_name<T>().c_str(),
 					this->GetName(), rhs.GetName());
 
 		if(_collector != nullptr)
 			return _collector( this->_internal, cvt->_internal );
 
 		/* Go over type traits, try to figure out which call to make, in priority. */
-		if constexpr(mnd::has_dyadic_add_ref<T>::value) {
+		if constexpr(mnd::meta::has_dyadic_add_ref<T>::value) {
 			return (void)this->_internal.Add( cvt->operator()() );
 		}
-		else if constexpr(mnd::has_dyadic_add_ptr<T>::value) {
+		else if constexpr(mnd::meta::has_dyadic_add_ptr<T>::value) {
 			return (void)this->_internal.Add( cvt->operator->() );
 		}
-		else if constexpr(mnd::has_free_add_fn<T>::value) {
+		else if constexpr(mnd::meta::has_free_add_fn<T>::value) {
 			return (void)Add( this->_internal, cvt->operator()() );
 		}
-		else if constexpr(mnd::has_free_mean_fn<T>::value) {
+		else if constexpr(mnd::meta::has_free_mean_fn<T>::value) {
 			return (void)Mean( this->_internal, cvt->operator()() );	
 		}
-		else if constexpr(mnd::has_add_div_unary_op<T>::value) {
+		else if constexpr(mnd::meta::has_add_div_unary_op<T>::value) {
 			_internal += cvt->operator()();
 			_internal /= 2;
 		}
@@ -2118,7 +1231,7 @@ public:
 					"and also its been constructed without a runtime callback. "
 					"Define a `void Add(T&, const T& )` function or pass a lambda as second argument "
 					"of 'RegisterObject(..)' (or another ctor).",
-					_SELF_TYPE_CSTR, this->GetName(), mnd::type_name<T>().c_str());
+					MND_SELF_TYPE_CSTR, this->GetName(), mnd::type_name<T>().c_str());
 		}
 	}
 
@@ -2148,19 +1261,19 @@ namespace mnd {
 template<typename T, std::size_t N>
 void Add(std::array<T, N>& lhs, const std::array<T, N>& rhs) {
 	for(std::size_t i = 0; i < N; ++i) {
-		if constexpr(mnd::has_free_add_fn<T>::value) {
+		if constexpr(mnd::meta::has_free_add_fn<T>::value) {
 			Add(lhs[i], rhs[i]);
 		}
-		else if constexpr(mnd::has_free_mean_fn<T>::value) {
+		else if constexpr(mnd::meta::has_free_mean_fn<T>::value) {
 			Mean(lhs[i], rhs[i]);
 		}
-		else if constexpr(mnd::has_dyadic_add_ref<T>::value) {
+		else if constexpr(mnd::meta::has_dyadic_add_ref<T>::value) {
 			lhs[i].Add(rhs[i]);
 		}
-		else if constexpr(mnd::has_dyadic_add_ptr<T>::value) {
+		else if constexpr(mnd::meta::has_dyadic_add_ptr<T>::value) {
 			lhs[i].Add(&rhs[i]);
 		}
-		else if constexpr(mnd::has_add_div_unary_op<T>::value) {
+		else if constexpr(mnd::meta::has_add_div_unary_op<T>::value) {
 			lhs[i] += rhs[i];
 			lhs[i] /= 2;
 		}
@@ -2179,19 +1292,19 @@ void Add(std::vector<T>& lhs, const std::vector<T>& rhs) {
 		ERROR("Vectors non-equal sized. Sizes: lhs=%zu, rhs=%zu. Cannot safely collect them together.",
 			N, rhs.size());
 	for(std::size_t i = 0; i < N; ++i) {
-		if constexpr(mnd::has_free_add_fn<T>::value) {
+		if constexpr(mnd::meta::has_free_add_fn<T>::value) {
 			Add(lhs[i], rhs[i]);
 		}
-		else if constexpr(mnd::has_free_mean_fn<T>::value) {
+		else if constexpr(mnd::meta::has_free_mean_fn<T>::value) {
 			Mean(lhs[i], rhs[i]);
 		}
-		else if constexpr(mnd::has_dyadic_add_ref<T>::value) {
+		else if constexpr(mnd::meta::has_dyadic_add_ref<T>::value) {
 			lhs[i].Add(rhs[i]);
 		}
-		else if constexpr(mnd::has_dyadic_add_ptr<T>::value) {
+		else if constexpr(mnd::meta::has_dyadic_add_ptr<T>::value) {
 			lhs[i].Add(&rhs[i]);
 		}
-		else if constexpr(mnd::has_add_div_unary_op<T>::value) {
+		else if constexpr(mnd::meta::has_add_div_unary_op<T>::value) {
 			lhs[i] += rhs[i];
 			lhs[i] /= 2;
 		}
@@ -2293,7 +1406,7 @@ public:
 				if(!dcast)
 					ERROR("Attempted to retrieve object named '%s' from %zu-sized list of owned TOnce<..> objects."
 						"Found at address 0x%lx a 'TOnceBase' but dynamic_cast failed? Same object registered multiple times? (%s)",
-						name, _vc.size(), (uintptr_t)o.get(), _SELF_TYPE_CSTR);
+						name, _vc.size(), (uintptr_t)o.get(), MND_SELF_TYPE_CSTR);
 				return dcast->operator->();
 			};
 		}
@@ -2315,7 +1428,7 @@ public:
 				if(!dcast)
 					ERROR("Attempted to retrieve object named '%s' from %zu-sized list of owned TOnce<..> objects."
 						"Found at address 0x%lx a 'TOnceBase' but dynamic_cast failed? Same object registered multiple times? (%s)",
-						name, _vc.size(), (uintptr_t)o.get(), _SELF_TYPE_CSTR);	
+						name, _vc.size(), (uintptr_t)o.get(), MND_SELF_TYPE_CSTR);	
 				return dcast->operator->(); // First registered object sets the collector
 			};
 		}
@@ -2338,7 +1451,7 @@ public:
 				if(!dcast)
 					ERROR("Attempted to retrieve object named '%s' from %zu-sized list of owned TOnce<..> objects."
 						"Found at address 0x%lx a 'TOnceBase' but dynamic_cast failed? Same object registered multiple times? (%s)",
-						name, _vc.size(), (uintptr_t)o.get(), _SELF_TYPE_CSTR);
+						name, _vc.size(), (uintptr_t)o.get(), MND_SELF_TYPE_CSTR);
 				return dcast->operator->();
 			};
 		}
@@ -2351,7 +1464,7 @@ public:
 	}
 
 	void Clean() noexcept {
-		if constexpr(mnd::has_clean_noexcept<T>::value)
+		if constexpr(mnd::meta::has_clean_noexcept<T>::value)
 			_inner->Clean();
 		else
 			static_assert(mnd::always_false_v<T>, "Type <T> has no `void Clean() noexcept` method defined.\n");
@@ -2567,7 +1680,7 @@ struct TProcessor<Out(Ins...)> : TProcessorBase {
 		const std::vector<std::shared_ptr<TOnceBase>> & rvc = rhs.out.GetTOnceVec();
 		if( lvc.size() != rvc.size() )
 			ERROR("(%s) trying to collect but output object named \'%s\' has unmatching sizes. %zu != %zu",
-				_SELF_TYPE_CSTR, this->out.GetName(), lvc.size(), rvc.size());
+				MND_SELF_TYPE_CSTR, this->out.GetName(), lvc.size(), rvc.size());
 		
 		for(int i=0; i<(int)lvc.size(); ++i)
 			lvc[i]->Collect( *rvc[i] );
@@ -2743,7 +1856,7 @@ template<typename... Ts>
 struct alignas(mnd::CL) TAnalysisProcess final {
 	static_assert((mnd::is_base_of_template<TProcessor, Ts>::value && ...),
 		"All the inderlying subprocess types <Ts> must inherit from TProcessor<...>.");
-	static_assert((mnd::has_process_entry<Ts>::value && ...),
+	static_assert((mnd::meta::has_process_entry<Ts>::value && ...),
 		"All the inderlying subprocess types <Ts> need a public `void ProcessEntry() noexcept` method implemented.");
 	static_assert((std::is_copy_constructible_v<Ts> && ...),
 		"All the inderlying subprocess types <Ts> need a copy ctor.");
@@ -2964,7 +2077,7 @@ public:
 
 	void Start() noexcept { /* ERROR(...) will call std::abort, so it's sane to mark it noexcept. */
 		if(_running)
-			ERROR("Start called but worker thread is still marked as running? (%s)", _SELF_TYPE_CSTR);
+			ERROR("Start called but worker thread is still marked as running? (%s)", MND_SELF_TYPE_CSTR);
 		if(int v = writer.GetValidity(); v != 0)
 			ERROR("Calling start but writer handle isn't valid (v != 0). v = 0x%02x. Check API for GetValidity().", v);
 		if(int r = mnd::GetValidity(reader); r != 0)
@@ -3039,9 +2152,9 @@ private:
 	 * holds the true unique pointer handle. */
 	void SetupWriter() {
 		if(info.out.fname.empty() || info.out.out_rnname.empty())
-			ERROR("Cannot proceed with setting up the writer if output (file,rnname) string information isn't given. (%s)", _SELF_TYPE_CSTR);
+			ERROR("Cannot proceed with setting up the writer if output (file,rnname) string information isn't given. (%s)", MND_SELF_TYPE_CSTR);
 		if(writer.ctx || writer.entry)
-			ERROR("RNTupleWriter, context or entry already given (non-null)? (%s)", _SELF_TYPE_CSTR);
+			ERROR("RNTupleWriter, context or entry already given (non-null)? (%s)", MND_SELF_TYPE_CSTR);
 
 		RExp2::RNTupleParallelWriter* pwriter_raw;
 		
@@ -3052,7 +2165,7 @@ private:
 			mnd::for_each_in_tuple(this->_proc, [this, &model](auto& p /* TProcessor<Out(In...)>) */ )
 				{
 					const char* name = p.out.GetName();
-					if(strlen(name) == 0) ERROR("Setting up the writer but an output container is unnamed. (%s)", _SELF_TYPE_CSTR);
+					if(strlen(name) == 0) ERROR("Setting up the writer but an output container is unnamed. (%s)", MND_SELF_TYPE_CSTR);
 
 					model->MakeField<typename decltype(p.out)::inner_type>( name );
 				}
@@ -3064,7 +2177,7 @@ private:
 		}
 		else { /* ... Or it can be called from the clone. Initial `Clone()` call will set the raw pointer upfront. Here just check validity. */
 			if( ! std::holds_alternative<RExp2::RNTupleParallelWriter*>(writer.pwriter) )
-				ERROR("RNTupleParallelWriter isn't the original, but clone not switched to raw pointer handle. (%s)", _SELF_TYPE_CSTR);
+				ERROR("RNTupleParallelWriter isn't the original, but clone not switched to raw pointer handle. (%s)", MND_SELF_TYPE_CSTR);
 			
 			pwriter_raw = std::get<RExp2::RNTupleParallelWriter*>(writer.pwriter);
 			if(!pwriter_raw)
@@ -3084,17 +2197,17 @@ private:
 
 	void SetupReader() {
 		if(info.in.fname.empty())
-			ERROR("Info given, but input file name empty. (%s)", _SELF_TYPE_CSTR);
+			ERROR("Info given, but input file name empty. (%s)", MND_SELF_TYPE_CSTR);
 
 		/* Reader object must be in the empty state. */
 		if(! mnd::IsEmpty(reader))
 			ERROR("Trying to setup a fresh reader, but the object is already created with index: %zu. "
-				"1 => RNReader; 2 => TTreeReader. (%s)", reader.index(), _SELF_TYPE_CSTR);
+				"1 => RNReader; 2 => TTreeReader. (%s)", reader.index(), MND_SELF_TYPE_CSTR);
 		
 		std::string obj_name; bool is_ttree{};
 		auto _file = std::make_unique<TFile>( info.in.fname.c_str() , "READ");
 		if(!_file || _file->IsZombie() || !_file->IsOpen())
-			ERROR("Setting up the reader but unable to make a TFile hook for \'%s\'. (%s)", info.in.fname.c_str(), _SELF_TYPE_CSTR);
+			ERROR("Setting up the reader but unable to make a TFile hook for \'%s\'. (%s)", info.in.fname.c_str(), MND_SELF_TYPE_CSTR);
 
 		/* Try finding the read container. Can be either TTree or RNTuple. */
 		for(TObject* _k : *_file->GetListOfKeys()) {
@@ -3112,7 +2225,7 @@ private:
 
 		if(obj_name.empty())
 			ERROR("File %s opened fine, but cannot find a 'ROOT::RNTuple' or 'TTree' object inside? (%s)",
-				info.in.fname.c_str(), _SELF_TYPE_CSTR);
+				info.in.fname.c_str(), MND_SELF_TYPE_CSTR);
 		
 		_file.reset(nullptr);
 
@@ -3165,12 +2278,12 @@ private:
 
 			r._file = std::make_unique<TFile>( info.in.fname.c_str() , "READ");
 			if(!r._file || r._file->IsZombie() || !r._file->IsOpen())
-				ERROR("Unable to make a TFile hook for \'%s\'. (%s)", info.in.fname.c_str(), _SELF_TYPE_CSTR);
+				ERROR("Unable to make a TFile hook for \'%s\'. (%s)", info.in.fname.c_str(), MND_SELF_TYPE_CSTR);
 
 			r._tree = dynamic_cast<TTree*>(r._file->Get(obj_name.c_str()));
 			if(!r._tree || r._tree->IsZombie())
 				ERROR("Unable to make a TTree hook for \'%s\'. "
-					"Even though TTree verified with name \'%s\'. (%s)", info.in.fname.c_str(), obj_name.c_str(), _SELF_TYPE_CSTR);
+					"Even though TTree verified with name \'%s\'. (%s)", info.in.fname.c_str(), obj_name.c_str(), MND_SELF_TYPE_CSTR);
 			
 			r._tree->SetCacheSize(64*1024*1024);
 
@@ -3190,11 +2303,11 @@ private:
 
 							if constexpr( mnd::is_base_of_template<TRawContainer, ContType>::value ) {
 								if(! strlen(cont.GetName()) )
-									ERROR("Input container (TTree-meant) unnamed? (%s)", _SELF_TYPE_CSTR);
+									ERROR("Input container (TTree-meant) unnamed? (%s)", MND_SELF_TYPE_CSTR);
 								
 								TBranch* b = r._tree->GetBranch( cont.GetName() );
 								if(!b) ERROR("File: \'%s\', TTree: \'%s\', branch \'%s\' not found. (%s)",
-									this->info.in.fname.c_str(), r._tree->GetName(), cont.GetName(), _SELF_TYPE_CSTR);
+									this->info.in.fname.c_str(), r._tree->GetName(), cont.GetName(), MND_SELF_TYPE_CSTR);
 								
 								using T = typename ContType::inner_type;
 								std::string c_type = mnd::type_name<T>();
@@ -3209,7 +2322,7 @@ private:
 											"TTree inspection gives branch type \'%s\', but we're requesting type \'%s\'. "
 											"Is this correct? (%s)\n",
 											cont.GetName(), this->info.in.fname.c_str(), r._tree->GetName(),
-											b->GetName(), b_type, c_type.c_str(), _SELF_TYPE_CSTR);
+											b->GetName(), b_type, c_type.c_str(), MND_SELF_TYPE_CSTR);
 									
 									cont._inner = reinterpret_cast<T*>( *(void**)b->GetAddress() );
 								}
@@ -3421,7 +2534,7 @@ template <
 	}
 
 	void Start (
-#ifdef __HAS_INDICATORS
+#ifdef MND_HAS_INDICATORS
 		indicators::ProgressBar& bar,
 #endif
 		const u64 max_entries = static_cast<u64>(-1),
@@ -3443,7 +2556,7 @@ template <
 		for(auto& w : pool)
 			w.Start();
 
-#ifdef __HAS_INDICATORS
+#ifdef MND_HAS_INDICATORS
 		indicators::show_console_cursor(false);
 #endif
 		auto* w = &pool[0]; u32 next = 0;
@@ -3462,14 +2575,14 @@ template <
 				{}           /* Do nothing; don't yield or reschedule - this is ~100 us latency. */
 #endif
 			}
-#ifdef __HAS_INDICATORS
+#ifdef MND_HAS_INDICATORS
 			mnd::PrintProgress(bar, j.last-1, nentries, NSlice);
 #endif
 		}
 
 		Stop();
 
-#ifdef __HAS_INDICATORS
+#ifdef MND_HAS_INDICATORS
 		if(!bar.is_completed())
 			bar.set_progress(100);
 		indicators::show_console_cursor(true);
@@ -3608,7 +2721,7 @@ struct TAnalysisPool<1, Processors...> final {
 	/* In singlethreaded case, don't poke the underlying std::thread of the process,
 	 * just call ProcessEntry() directly. */
 	void Start (
-#ifdef __HAS_INDICATORS
+#ifdef MND_HAS_INDICATORS
 		indicators::ProgressBar& bar,
 #endif
 		const u64 max_entries = static_cast<u64>(-1),
@@ -3627,14 +2740,14 @@ struct TAnalysisPool<1, Processors...> final {
 		WARN("Starting the singlethreaded analysis with " EMPH1(%lu) " entries.\n", nentries);
 		u64 n_print_every = ((NSlice > 0) ? NSlice : 512);
 
-#ifdef __HAS_INDICATORS
+#ifdef MND_HAS_INDICATORS
 		indicators::show_console_cursor(false);
 #endif
 	
 		for(u64 evId = 0; evId < nentries; ++evId) {
 			process.GetEntry( static_cast<Long64_t>(evId) );
 
-#ifdef __HAS_INDICATORS
+#ifdef MND_HAS_INDICATORS
 			mnd::PrintProgress(bar, evId, nentries, n_print_every);
 #endif
 			std::apply([](auto&... ps) {
@@ -3644,7 +2757,7 @@ struct TAnalysisPool<1, Processors...> final {
 			process.writer.ctx->Fill( *process.writer.entry );
 		}
 
-#ifdef __HAS_INDICATORS
+#ifdef MND_HAS_INDICATORS
 		if(!bar.is_completed())
 			bar.set_progress(100);
 		indicators::show_console_cursor(true);
@@ -3677,8 +2790,5 @@ private:
 	}
 };
 
-#ifdef MND_EXPORT_OSTREAM_G_NAMESPACE
-using mnd::fmt::operator<<;
-#endif
 
 #endif /* __MONAD_INCLUDE_HXX__ */
