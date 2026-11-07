@@ -712,18 +712,6 @@ auto zip_refs(Tuple& t1, const Tuple& t2) {
 	return zip_refs_impl( t1, t2, std::make_index_sequence<N>{} );
 }
 
-template<typename T,
-	typename U = remove_cvref_t<T>
-> constexpr int FindIndex(const T& arr, const typename meta::is_an_array<U>::underlying_type& val) noexcept(
-	noexcept(static_cast<bool>(arr[0] == val))
-) {
-	static_assert(meta::is_an_array_v<U>, "Type T must be a C-style array or \'std::array<T,N>\'");
-	constexpr std::size_t N = meta::is_an_array<U>::size;
-	for(std::size_t i=0; i < N; ++i)
-		if(arr[i] == val) return i;
-	return -1;
-}
-
 /* Small container to encapsulate both mean and sample variance. */
 struct MeanVar {
 	double mean, var;
@@ -813,80 +801,6 @@ template <
 	}
 	double variance = sq_sum / static_cast<double>(n-1);
 	return {mean, variance};
-}
-
-/* Make a constexpr array constructor, filled with a default value, other than `{}` */
-template<typename T, std::size_t... I>
-constexpr std::array<T, sizeof...(I)>
-_make_filled_array_impl(T value, std::index_sequence<I...>) {
-	return { ((void)I, value)... };
-}
-template<typename T, std::size_t N>
-constexpr std::array<T, N> make_filled_array(T value) {
-	return _make_filled_array_impl<T>(value, std::make_index_sequence<N>{});
-}
-
-/* Maps a dynamic range of underlying type <T> via the functor fn: T -> U, and collects
- * the results as std::vector<U>. This is *not* a lazy evaluator! */
-template<
-	typename Range,
-	typename Callable,
-	typename std::enable_if_t<!meta::is_an_array_v<Range>>* = nullptr
-> auto map(const Range& input, Callable&& fn) {
-	static_assert(meta::is_range<const Range>::value, "Type T must support a const range iteration.");
-	using U = remove_cvref_t<
-		std::invoke_result_t<Callable&, decltype(*std::begin(input))>
-	>;
-
-	std::vector<U> output;
-	if constexpr(meta::is_sized_range<const Range>::value) {
-		output.reserve(std::size(input));
-	}
-
-	for(auto&& value : input)
-		output.emplace_back(
-			std::invoke(fn, std::forward<decltype(value)>(value))
-		);
-	return output;
-}
-
-namespace detail {
-template<typename Arr, typename Callable>
-using map_array_value_t = std::decay_t<
-	std::invoke_result_t<Callable&, decltype(*std::begin(
-		std::declval<const Arr&>()))>
->;
-
-template<typename Arr, typename Callable, std::size_t... I>
-constexpr auto map_array(
-	const Arr& input,
-	Callable& fn,
-	std::index_sequence<I...>
-) noexcept(noexcept(
-	std::array<map_array_value_t<Arr, Callable>, sizeof...(I)>{
-		fn(input[I])...
-	}
-)) {
-	using U = map_array_value_t<Arr, Callable>;
-	return std::array<U, sizeof...(I)>{ fn(input[I])... };
-}
-} // namespace detail
-
-/* Maps a static range of size N and underlying type <T> via the functor fn: T -> U, and collects
- * the results as std::array<U,N>. This is *not* a lazy evaluator! */
-template<
-	typename Arr,
-	typename Callable,
-	typename std::enable_if_t<meta::is_an_array_v<Arr>>* = nullptr
-> constexpr auto map(const Arr& input, Callable&& fn) noexcept(
-	noexcept(detail::map_array(
-		input, fn,
-		std::make_index_sequence<meta::is_an_array<Arr>::size>{}
-	))
-) {
-	return detail::map_array(input, fn,
-		std::make_index_sequence<meta::is_an_array<Arr>::size>{}
-	);
 }
 
 /* Sometimes cursor can be hidden mid execution,
@@ -2317,9 +2231,9 @@ private:
 									const char* b_type = b->GetClassName();
 
 									if(strcmp(b_type, c_type.c_str()) != 0)
-										WARN("Setting up the container \'%s\'. "
-											"File: \'%s\', TTree: \'%s\', branch \'%s\'. Types mismatch: "
-											"TTree inspection gives branch type \'%s\', but we're requesting type \'%s\'. "
+										WARN("Setting up the container '%s'. "
+											"File: '%s', TTree: '%s', branch '%s'. Types mismatch: "
+											"TTree inspection gives branch type '%s', but we're requesting type '%s'. "
 											"Is this correct? (%s)\n",
 											cont.GetName(), this->info.in.fname.c_str(), r._tree->GetName(),
 											b->GetName(), b_type, c_type.c_str(), MND_SELF_TYPE_CSTR);
