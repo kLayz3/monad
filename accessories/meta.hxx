@@ -476,5 +476,84 @@ template<typename T,
 	return -1;
 }
 
+namespace detail {
+template<typename Ordering>
+constexpr bool is_ordered(Ordering&& )  noexcept { return true; }
+template<typename Ordering, typename T>
+constexpr bool is_ordered(Ordering&& , T&& ) noexcept { return true; }
+
+template<typename Ordering, typename T, typename U, typename... Rest>
+constexpr bool is_ordered(Ordering&& o, T&& a0, U&& a1, Rest&&... rest) {
+    return ( o(std::forward<T>(a0), a1) )
+        && is_ordered(o, std::forward<U>(a1), std::forward<Rest>(rest)...);
+}
+}; // namespace detail
+
+/* Check that a sequence of arguments: a0,a1,a2,... aN is strictly ascending:
+ * a0 < a1 < a2 < ... < aN . Requires less-than < operator*/
+template<
+	typename... Ts,
+	typename std::enable_if_t<
+		sizeof...(Ts) != 1 ||
+		!(meta::is_range<remove_cvref_t<Ts>>::value || ...)
+	>* = nullptr
+> constexpr bool is_strictly_ascending(Ts&&... ts) {
+    return detail::is_ordered(
+        [](const auto& lhs, const auto& rhs) -> bool { return lhs < rhs; },
+        std::forward<Ts>(ts)...
+    );
+}
+/* Check that a sequence of arguments: a0,a1,a2,... aN is strictly descending:
+ * a0 > a1 > a2 > ... > aN . Requires greater-than > operator. */
+template<
+	typename... Ts,
+	typename std::enable_if_t<
+		sizeof...(Ts) != 1 ||
+		!(meta::is_range<remove_cvref_t<Ts>>::value || ...)
+	>* = nullptr
+> constexpr bool is_strictly_descending(Ts&&... ts) {
+    return detail::is_ordered(
+        [](const auto& lhs, const auto& rhs) -> bool { return lhs > rhs; },
+        std::forward<Ts>(ts)...
+    );
+}
+
+template <
+	typename Range,
+	typename = std::enable_if_t<meta::is_range<Range>::value>
+> constexpr bool is_strictly_ascending(const Range& container) {
+	/* Loop over via iterators. STL-one std::is_sorted is not constexpr in C++17. */
+	auto first = std::begin(container);
+	auto last = std::end(container);
+	if(first != last) {
+        auto next = first;
+        while(++next != last)
+        {
+            if( !(*first < *next))
+                return false;
+            first = next;
+        }
+    }
+    return true;
+}
+template <
+	typename Range,
+	typename = std::enable_if_t<meta::is_range<Range>::value>
+> constexpr bool is_strictly_descending(const Range& container) {
+	/* Loop over via iterators. STL-one std::is_sorted is not constexpr in C++17. */
+	auto first = std::begin(container);
+	auto last = std::end(container);
+	if(first != last) {
+        auto next = first;
+        while(++next != last)
+        {
+            if( !(*first > *next))
+                return false;
+            first = next;
+        }
+    }
+    return true;
+}
+
 
 } // namespace mnd

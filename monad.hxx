@@ -342,38 +342,6 @@ constexpr double clamp(const T& value, const std::array<T,2>& bounds) noexcept(
 	     : (bounds[1] < value) ? bounds[1]: value;
 }
 
-namespace detail {
-template<typename Ordering>
-constexpr bool is_ordered(Ordering&& )  noexcept { return true; }
-template<typename Ordering, typename T>
-constexpr bool is_ordered(Ordering&& , T&& ) noexcept { return true; }
-
-template<typename Ordering, typename T, typename U, typename... Rest>
-constexpr bool is_ordered(Ordering&& o, T&& a0, U&& a1, Rest&&... rest) {
-    return ( o(std::forward<T>(a0), a1) )
-        && is_ordered(o, std::forward<U>(a1), std::forward<Rest>(rest)...);
-}
-}; // namespace detail
-
-/* Check that a sequence of arguments: a0,a1,a2,... aN is strictly ascending:
- * a0 < a1 < a2 < ... < aN */
-template<typename... Ts>
-constexpr bool is_strictly_ascending(Ts&&... ts) {
-    return detail::is_ordered(
-        [](const auto& lhs, const auto& rhs) -> bool { return lhs < rhs; },
-        std::forward<Ts>(ts)...
-    );
-}
-/* Check that a sequence of arguments: a0,a1,a2,... aN is strictly ascending:
- * a0 > a1 > a2 > ... > aN */
-template<typename... Ts>
-constexpr bool is_strictly_descending(Ts&&... ts) {
-    return detail::is_ordered(
-        [](const auto& lhs, const auto& rhs) -> bool { return lhs > rhs; },
-        std::forward<Ts>(ts)...
-    );
-}
-
 struct TimePoint {
 	std::chrono::high_resolution_clock::time_point t;
 	std::string tag;
