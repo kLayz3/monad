@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdexcept>
 #include <type_traits>
 #include <array>
 #include <iterator>
@@ -555,5 +556,15 @@ template <
     return true;
 }
 
+template<typename Range>
+constexpr bool contains(
+	const Range& container,
+	typename Range::underlying_type const& probe
+) {
+	const auto first = std::begin(container);
+	const auto last = std::end(container);
+
+	return std::find(first, last, probe) != last;
+}
 
 } // namespace mnd

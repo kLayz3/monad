@@ -579,6 +579,76 @@ struct cache {
 	const T* operator->() const& noexcept { return std::addressof(value); }
 };
 
+/* This is similar to mnd::cache<Empty>, a simple struct that makes an atomic
+ * wrapper copy-assignable etc. */
+struct atomic_bool {
+	
+	std::atomic<bool> flag{false};
+
+	atomic_bool() = default;
+	atomic_bool(const atomic_bool& rhs) noexcept : flag(
+		rhs.flag.load(std::memory_order_relaxed)
+	) {}
+	
+	atomic_bool& operator=(const atomic_bool& rhs) noexcept {
+		if(this == &rhs)
+			return *this;
+		
+		flag.store(
+			rhs.flag.load(std::memory_order_relaxed),
+			std::memory_order_relaxed
+		);
+		return *this;
+	}
+	atomic_bool(atomic_bool&& rhs) noexcept : flag(
+		rhs.flag.exchange(false, std::memory_order_relaxed)
+	) {}
+	
+	atomic_bool& operator=(atomic_bool&& rhs) noexcept {
+		if(this == &rhs)
+			return *this;
+
+		const bool rflag =
+			rhs.flag.exchange(false, std::memory_order_relaxed);
+
+		flag.store(rflag, std::memory_order_relaxed);
+		return *this;
+	}
+	~atomic_bool() = default;
+
+	bool load_acq() const noexcept {
+		return flag.load(std::memory_order_acquire); }
+	bool load() const noexcept {
+		return flag.load(std::memory_order_relaxed); }
+	void publish(bool value) noexcept {
+		flag.store(value, std::memory_order_release); }
+	void reset() noexcept { publish(false); }
+};
+
+/* Copyable mutex, where each copy is its own lock.
+ * There's no sharing here. */
+class mutex {
+	std::mutex inner_;
+
+public:
+	mutex() = default;
+
+	mutex(const mutex& ) noexcept {}
+	mutex(mutex&& ) noexcept {}
+
+	mutex& operator=(const mutex& ) noexcept {
+		return *this;
+	}
+
+	mutex& operator=(mutex&& ) noexcept {
+		return *this;
+	}
+
+	inline void lock() { inner_.lock(); }
+	inline bool try_lock() { return inner_.try_lock(); }
+	inline void unlock() { inner_.unlock(); }
+};
+
 namespace meta {
 
 template<typename T, typename = void>
