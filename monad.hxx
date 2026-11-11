@@ -751,35 +751,75 @@ auto zip_refs(Tuple& t1, const Tuple& t2) {
 }
 
 /* Small container to encapsulate both mean and sample variance. */
+template<typename T>
 struct MeanVar {
-	double mean, var;
-	inline operator std::pair<double,double>() const noexcept { return { mean, var }; }
-	inline operator std::array<double,2>() const noexcept { return { mean, var }; }
+	static_assert(std::is_floating_point_v<T>,
+		"Template arg must be a floating point type.");
+	
+	T mean = NAN;
+	T var = NAN;
+	
+	operator std::pair<T,T>() const noexcept { return { mean, var }; }
+	operator std::array<T,2>() const noexcept { return { mean, var }; }
 
 	friend std::ostream& operator<<(std::ostream& os, const MeanVar& rhs) {
 		return os << rhs.mean << " ± " << std::sqrt( rhs.var );
 	}
 
-	inline std::string string() const {
+	std::string string() const {
 		std::stringstream ss;
 		ss << *this;
 		return ss.str();
 	}
-
-	inline std::string lstring() const {
+	std::string lstring() const {
 		std::stringstream ss;
 		ss << mean << " #pm " << std::sqrt(var);
 		return ss.str();
 	}
 };
+template<typename T>
+MeanVar(T) -> MeanVar<T>;
 
-/* Calculate the (unbiased) sample variance. */
+template<typename T, typename W>
+struct StatisticalPoint {
+	static_assert(std::is_arithmetic_v<T>, "Value type must be arithmetic.");
+	static_assert(std::is_arithmetic_v<W>, "Weight type must be arithmetic.");
+	T value;
+	W weight;
+	friend std::ostream& operator<<(std::ostream& os, const StatisticalPoint& point) {
+		return os << '{' << point.value << "; " << point.weight << '}';
+	}
+};
+template<typename T, typename W>
+StatisticalPoint(T, W) -> StatisticalPoint<T, W>;
+
+namespace meta {
+template<typename>
+struct is_statistical_point : std::false_type {};
+
+template<typename T, typename W>
+struct is_statistical_point<StatisticalPoint<T,W>> : std::true_type {
+	using value_type = T;
+	using weight_type = W;
+};
+} // namespace meta
+
+/* Calculate the (unbiased) sample variance. Each entry has also its internal 'weight' set to 1. */
 template <
 	Unroll U = Unroll::No,
+	typename ResultType = void, // If left unspecified, result type is double. */
+	// .. all types below this line deduced :-)
 	typename Arr,
-	typename T = typename meta::is_an_array<remove_cvref_t<Arr>>::underlying_type
-> constexpr MeanVar mean_var(const Arr& arr) noexcept {
-	static_assert(std::is_convertible<T, double>::value, "Underlying type must be convertable to double.");
+	typename T = typename meta::is_an_array<remove_cvref_t<Arr>>::underlying_type,
+	typename R = std::conditional_t<std::is_void_v<ResultType>, double, ResultType>
+> constexpr auto mean_var(const Arr& arr) noexcept -> MeanVar<R> {
+	static_assert(std::disjunction<
+		std::is_convertible<T,R>,
+		meta::is_statistical_point<T>
+		>::value, "Underlying type must be either:\n"
+		"[1] convertible to specified floating point-type of output var (default: double)\n"
+		"[2] mnd::StatisticalPoint<T,W> generic type."
+	);
 
 	/* Non-optimized, Eigen maybe has a tiny bit better optimized variance estimated.
 	 * For numeric stability, we do two passes, finding the arithmetic value first.
@@ -787,21 +827,78 @@ template <
 	constexpr size_t N = mnd::len<Arr>();
 
 	if constexpr(N == 0) {
-		return {NAN, NAN};
-	} else if constexpr(N == 1) {
-		return {static_cast<double>(arr[0]), NAN};
+		return { static_cast<R>(NAN), static_cast<R>(NAN) };
+	}
+	else if constexpr(meta::is_statistical_point<T>::value) {
+		/* Nonnegative relative weights for independent observations with
+		 * common variance. */
+		constexpr R nan = static_cast<R>(NAN);
+		auto visit = [&](auto&& fn) constexpr {
+			if constexpr(U == Unroll::No) {
+				for(const auto& item : arr)
+					fn(item);
+			} else {
+				static_for_each(arr, fn);
+			}
+		};
+
+		R weight_sum = 0;
+		R weight_sq_sum = 0;
+		R weighted_sum = 0;
+		size_t positive_weights = 0;
+		bool invalid = false;
+
+		visit([&](const auto& item) constexpr {
+			const R w = static_cast<R>(item.weight);
+			if(!(w >= R{0})) { // Reject negative weights and NaN.
+				invalid = true;
+				return;
+			}
+			if(w == R{0})
+				return;
+
+			++positive_weights;
+			weight_sum += w;
+			weight_sq_sum += w * w;
+			weighted_sum += w * static_cast<R>(item.value);
+		});
+
+		if(invalid || !(weight_sum > R{0}))
+			return {nan, nan};
+
+		const R mu = weighted_sum / weight_sum;
+		if(positive_weights < 2)
+			return {mu, nan};
+
+		R squared_deviations = 0;
+		visit([&](const auto& item) constexpr {
+			const R w = static_cast<R>(item.weight);
+			if(w == R{0})
+				return;
+			const R d = static_cast<R>(item.value) - mu;
+			squared_deviations += w * d * d;
+		});
+
+		const R denominator = weight_sum - weight_sq_sum / weight_sum;
+		if(!(denominator > R{0}))
+			return {mu, nan};
+
+		return {mu, squared_deviations / denominator};
+	}
+	else if constexpr(N == 1) {
+		return { static_cast<R>(arr[0]), static_cast<R>(NAN) };
 	}
 	else {
-		const double mu = mnd::mean<U,double>(arr);
-		double result = 0.0;
+		const R mu = mnd::mean<U,R>(arr);
+		R result = static_cast<R>(0.0);
 		if constexpr(U == Unroll::No) {
 			for(const T& item: arr) {
-				double d = static_cast<double>(item) - mu;
+				const R d = static_cast<R>(item) - mu;
 				result += d*d;
 			}
 		} else {
 			static_for_each(arr, [mu, &result](const T& item) {
-				double d = static_cast<double>(item) - mu;
+				const R d = static_cast<R>(item) - mu;
 				result += d*d;
 			});
 		}
@@ -812,33 +909,84 @@ template <
 /* SFINAE'd away for arrays. Previous overload wins. */
 template <
 	typename Range,
+	typename ResultType = void, // If left unspecified, result type is double. */
+	// .. all types below this line deduced :-)
 	typename Bare = remove_cvref_t<Range>,
-	typename = typename std::enable_if_t<!meta::is_an_array<Bare>::value>
-> MeanVar mean_var(const Range& r) noexcept {
-	static_assert(meta::is_range<Range>::value,
-		"Type `Range` must be an MONAD-compatible range.");
-	using T = typename meta::is_range<Range>::underlying_type;
-	static_assert(std::is_convertible_v<T, double>,
-		"Underlying type must be convertible to double.");
+	typename R = std::conditional_t<std::is_void_v<ResultType>, double, ResultType>,
+	typename T = typename meta::is_range<Bare>::underlying_type,
+	typename = std::enable_if_t<!meta::is_an_array<Bare>::value>
+> auto mean_var(const Range& r) noexcept -> MeanVar<R> {
+	static_assert(std::disjunction<
+		std::is_convertible<T,R>,
+		meta::is_statistical_point<T>
+		>::value, "Type underlying the Range must be either:\n"
+		"[1] convertible to specified floating point-type of output var (default: double)\n"
+		"[2] mnd::StatisticalPoint<T,W> generic type."
+	);
 
-	auto first = std::cbegin(r);
-	auto last = std::cend(r);
-	const auto n = std::distance(first, last);
-	if(n <= 0) return { NAN, NAN };
+	if constexpr(meta::is_statistical_point<T>::value) {
+		/* Same relative-weight estimator as the fixed-size overload.
+		 * Requires a range that can be traversed more than once. */
+		constexpr R nan = static_cast<R>(NAN);
+		R weight_sum = 0;
+		R weight_sq_sum = 0;
+		R weighted_sum = 0;
+		size_t positive_weights = 0;
 
-	double sum = 0.0;
-	for(auto it = first; it != last; ++it) {
-		sum += static_cast<double>(*it);
+		for(auto const& item : r) {
+			const R w = static_cast<R>(item.weight);
+			if(!(w >= R{0}))
+				return {nan, nan};
+			if(w == R{0})
+				continue;
+
+			++positive_weights;
+			weight_sum += w;
+			weight_sq_sum += w * w;
+			weighted_sum += w * static_cast<R>(item.value);
+		}
+
+		if(!(weight_sum > R{0}))
+			return {nan, nan};
+
+		const R mu = weighted_sum / weight_sum;
+		if(positive_weights < 2)
+			return {mu, nan};
+
+		R squared_deviations = 0;
+		for(auto const& item : r) {
+			const R w = static_cast<R>(item.weight);
+			if(w == R{0})
+				continue;
+			const R d = static_cast<R>(item.value) - mu;
+			squared_deviations += w * d * d;
+		}
+
+		const R denominator = weight_sum - weight_sq_sum / weight_sum;
+		if(!(denominator > R{0}))
+			return {mu, nan};
+
+		return {mu, squared_deviations / denominator};
+	} else { // if constexpr(meta::is_statistical_point<T>::value)
+		auto first = std::cbegin(r);
+		auto last = std::cend(r);
+		const auto n = std::distance(first, last);
+		if(n <= 0) return { static_cast<R>(NAN), static_cast<R>(NAN) };
+
+		R sum = 0;
+		for(auto it = first; it != last; ++it) {
+			sum += static_cast<R>(*it);
+		}
+		R mean = sum / static_cast<R>(n);
+
+		R sq_sum = 0.0;
+		for(auto it = first; it != last; ++it) {
+			R d = static_cast<R>(*it) - mean;
+			sq_sum += d * d;
+		}
+		const R variance = sq_sum / static_cast<R>(n-1);
+		return {mean, variance};
 	}
-	double mean = sum / static_cast<double>(n);
-
-	double sq_sum = 0.0;
-	for(auto it = first; it != last; ++it) {
-		double d = static_cast<double>(*it) - mean;
-		sq_sum += d * d;
-	}
-	double variance = sq_sum / static_cast<double>(n-1);
-	return {mean, variance};
 }
 
 /* Sometimes cursor can be hidden mid execution,
